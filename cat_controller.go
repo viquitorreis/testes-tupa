@@ -66,10 +66,22 @@ func (cdc *CatDataController) GetCatData(cc context.Context, w http.ResponseWrit
 		}
 	}()
 
-	fmt.Println(ctx)
+	// for select, vamos sincronizar isso td
+	for {
+		select { // o select permite uma goroutine esperar em multiplos operadores de comunicação
+		case <-cc.Done():
+			return fmt.Errorf("Request cancelada: %v", cc.Err())
+		case resp := <-respch:
+			WriteJSONHelper(w, http.StatusOK, resp.value)
 
-	WriteJSONHelper(w, http.StatusOK, catData)
-	return nil
+			fmt.Println("CatData: ", resp.value)
+			return resp.err
+		}
+	}
+
+	// fmt.Println(ctx)
+
+	// return nil
 }
 
 func PassingCtxCatData(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
