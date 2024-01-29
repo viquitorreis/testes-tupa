@@ -7,6 +7,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
@@ -19,6 +23,9 @@ type APIFunc func(context.Context, http.ResponseWriter, *http.Request) error
 type APIServer struct {
 	listenAddr string
 	router     *mux.Router
+
+	//
+	server *http.Server
 }
 
 type HTTPMethod string
@@ -108,13 +115,36 @@ func (a *APIServer) New() {
 		a.router.HandleFunc("/", WelcomeHandler).Methods(http.MethodGet)
 	}
 
-	fmt.Println(FmtBlue("Servidor iniciado na porta: " + a.listenAddr))
-
 	routerHandler := cors.Default().Handler(a.router)
 
-	if err := http.ListenAndServe(a.listenAddr, routerHandler); err != nil {
-		log.Fatal(FmtRed("Erro ao iniciar servidor: "), err)
+	a.server = &http.Server{
+		Addr:    a.listenAddr,
+		Handler: routerHandler,
 	}
+
+	fmt.Println(FmtBlue("Servidor iniciado na porta: " + a.listenAddr))
+
+	go func() {
+		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal(FmtRed("Erro ao iniciar servidor: "), err)
+		}
+		log.Println(FmtYellow("Servidor parou de receber novas conexões"))
+	}()
+
+	signchan := make(chan os.Signal, 1)
+	signal.Notify(signchan, syscall.SIGINT, syscall.SIGTERM)
+	<-signchan
+
+	ctx, shutdownRelease := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownRelease()
+
+	if err := a.server.Shutdown(ctx); err != nil {
+		log.Fatal(FmtRed("Erro ao desligar servidor: "), err)
+	}
+
+	///////////////// NAO TA CHEGANDO AQ
+	fmt.Println(FmtYellow("Servidor encerrado na porta: " + a.listenAddr))
+
 }
 
 func NewApiServer(listenAddr string) *APIServer {
@@ -139,7 +169,7 @@ func HandleAPIEndpoint2(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-func HandlePOSTEndpoint(w http.ResponseWriter, r *http.Request) error {
+func HandlePOSTEndpoint(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	var testeString string
 
 	if err := json.NewDecoder(r.Body).Decode(&testeString); err != nil {
@@ -147,8 +177,9 @@ func HandlePOSTEndpoint(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	fmt.Println(testeString)
+	time.Sleep(time.Second * 5)
+	fmt.Println(FmtBlue("Depois de 5s do shutdown"))
 
-	fmt.Println("Endpoint da API")
 	WriteJSONHelper(w, http.StatusOK, testeString)
 	return nil
 }
@@ -168,10 +199,10 @@ func main() {
 	// 	MethodGet: catDataController.GetCatData,
 	// })
 
-	catDataController2 := &CatDataController{}
-	catDataController2.RegisterRoutes(server.router, "/catdata", map[HTTPMethod]APIFunc{
-		MethodGet: PassingCtxCatData,
-	})
+	// catDataController2 := &CatDataController{}
+	// catDataController2.RegisterRoutes(server.router, "/catdata", map[HTTPMethod]APIFunc{
+	// 	MethodGet: PassingCtxCatData,
+	// })
 
 	// server.SetDefaultRoute(map[HTTPMethod]APIFunc{
 	// 	MethodGet:  HandleAPIEndpoint,
@@ -188,6 +219,11 @@ func main() {
 	// secondaryController.RegisterRoutes(server.router, "/api2", map[HTTPMethod]APIFunc{
 	// 	MethodGet: HandleAPIEndpoint,
 	// })
+
+	testGracefulShutdown := Controller{}
+	testGracefulShutdown.RegisterRoutes(server.router, "/shutdown", map[HTTPMethod]APIFunc{
+		MethodPost: HandlePOSTEndpoint,
+	})
 
 	server.New()
 
