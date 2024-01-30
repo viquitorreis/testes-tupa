@@ -1,5 +1,15 @@
 github.com/Iuptec/tupa v0.0.0 h1:AKjA+K+rnxcQkYo4C3Hl8LF432+NYl89EX85pE77mOs=
 github.com/Iuptec/tupa v0.0.0/go.mod h1:OdESlJaFwM/ez48nfieHcxRj5DHzb9r9lhEAZK29L7A=
+github.com/Iuptec/tupa v0.0.2 h1:Hc+J3oNAHFAlpbT5/5bBgijI8ygq32FXpw9C8BKOam0=
+github.com/Iuptec/tupa v0.0.2/go.mod h1:OdESlJaFwM/ez48nfieHcxRj5DHzb9r9lhEAZK29L7A=
+github.com/Iuptec/tupa v0.0.3 h1:wsUXDZlPEmKqZIJzg1Khh89FERxVjYYEfC66UyDmwGA=
+github.com/Iuptec/tupa v0.0.3/go.mod h1:OdESlJaFwM/ez48nfieHcxRj5DHzb9r9lhEAZK29L7A=
+github.com/Iuptec/tupa v0.0.4 h1:YkjT7JgMWgwzZIv/C7HSmIxrIbSGkWAJsm13z3m2ttU=
+github.com/Iuptec/tupa v0.0.4/go.mod h1:OdESlJaFwM/ez48nfieHcxRj5DHzb9r9lhEAZK29L7A=
+github.com/Iuptec/tupa v0.0.5 h1:VGXB6i4+WOYOgD7Z3cFPa+nfQAYYuTsMPrdgLcMuCZo=
+github.com/Iuptec/tupa v0.0.5/go.mod h1:OdESlJaFwM/ez48nfieHcxRj5DHzb9r9lhEAZK29L7A=
+github.com/Iuptec/tupa v0.0.6 h1:LVThlXZpi3S0nh4vttw9RclzoUWz3J8gWed6t7MqM/M=
+github.com/Iuptec/tupa v0.0.6/go.mod h1:OdESlJaFwM/ez48nfieHcxRj5DHzb9r9lhEAZK29L7A=
 github.com/gorilla/mux v1.8.1 h1:TuBL49tXwgrFYWhqrNgrUNEY92u81SPhu7sTdzQEiWY=
 github.com/gorilla/mux v1.8.1/go.mod h1:AKf9I4AEqPTmMytcMc0KkNouC66V3BtZ4qD5fmWSiMQ=
 github.com/rs/cors v1.10.1 h1:L0uuZVXIKlI1SShY2nhFfo44TYvDPQ1w4oFkUJNfhyo=

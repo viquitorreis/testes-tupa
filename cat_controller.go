@@ -14,10 +14,6 @@ type CatStruct struct {
 	Length int    `json:"length"`
 }
 
-type CatDataController struct {
-	Controller
-}
-
 func FetchCatDataAPI(ctx context.Context) (CatStruct, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://catfact.ninja/fact", nil)
 	if err != nil {
@@ -45,7 +41,7 @@ type CatDataResponse struct {
 	err   error
 }
 
-func (cdc *CatDataController) GetCatData(cc context.Context, w http.ResponseWriter, r *http.Request) error {
+func GetCatData(cc context.Context, w http.ResponseWriter, r *http.Request) error {
 	// pegando valor do context
 	userID, ok := cc.Value("userID").(string)
 	if !ok {
@@ -84,13 +80,12 @@ func (cdc *CatDataController) GetCatData(cc context.Context, w http.ResponseWrit
 	// return nil
 }
 
-func PassingCtxCatData(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	catCtr := &CatDataController{}
+func PassingCtxCatData(tc *TupaContext) error {
 	userID := "2602"
-	reqCtx := context.WithValue(ctx, "userID", userID)
+	reqCtx := context.WithValue(tc.request.Context(), "userID", userID)
 
 	start := time.Now()
-	err := catCtr.GetCatData(reqCtx, w, r)
+	err := GetCatData(reqCtx, tc.response, tc.request)
 	fmt.Println("Tempo de execução: ", time.Since(start))
 
 	return err
