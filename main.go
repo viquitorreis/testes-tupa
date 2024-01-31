@@ -41,6 +41,7 @@ type (
 		Request() *http.Request
 		Response() http.ResponseWriter
 		SendString(status int, s string) error
+		Param(param string) string
 	}
 
 	TupaContext struct {
@@ -223,12 +224,15 @@ func (tc *TupaContext) Response() *http.ResponseWriter {
 func (tc *TupaContext) SendString(status int, s string) error {
 	// value := ctx.Value("value")
 
-	value := tc.Context.Value("value")
-	fmt.Printf("Value: %v\n", value)
-
 	tc.response.WriteHeader(status)
 	_, err := tc.response.Write([]byte(s))
 	return err
+}
+
+func (tc *TupaContext) Param(param string) string {
+	fmt.Println(mux.Vars(tc.request))
+	fmt.Println(tc.request)
+	return mux.Vars(tc.request)[param]
 }
 
 // TESTES HANDLERS
@@ -315,6 +319,17 @@ func main() {
 	testCatDataController := NewController()
 	testCatDataController.RegisterRoutes("/catdata", map[HTTPMethod]APIFunc{
 		MethodGet: PassingCtxCatData,
+	})
+
+	testGetParam := NewController()
+	testGetParam.RegisterRoutes("/param", map[HTTPMethod]APIFunc{
+		MethodGet: handleSendString,
+	})
+	testGetParam.RegisterRoutes("/param/{id}", map[HTTPMethod]APIFunc{
+		MethodGet: func(tc *TupaContext) error {
+			tc.SendString(http.StatusOK, "HELLO WORLD!"+tc.Param("id"))
+			return nil
+		},
 	})
 
 	server.New()

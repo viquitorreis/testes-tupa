@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/gorilla/mux"
 )
 
 func BenchmarkDirectAccessSendString(b *testing.B) {
@@ -59,22 +61,44 @@ func TestConcurrentSendStringCtxExample(t *testing.T) {
 	wg.Wait()
 }
 
-// func TestSendStringWithValues(t *testing.T) {
-// 	req, _ := http.NewRequest(http.MethodGet, "/", nil)
-// 	w := httptest.NewRecorder()
-// 	tupaCtx := &TupaContext{
-// 		request:  req,
-// 		response: w,
-// 	}
+func TestParam(t *testing.T) {
+	// Create a mock request with a route parameter
+	t.Run("Teste método Param com parametro", func(t *testing.T) {
+		req, err := http.NewRequest("GET", "/users/123", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
 
-// 	tupaCtx.WithValues(map[any]any{
-// 		"nome":    "Victor",
-// 		"empresa": "Iuptec",
-// 	})
-// 	ctx := context.Background()
+		// Colocando um parametro na rota da requisição
+		req = mux.SetURLVars(req, map[string]string{
+			"id": "123",
+		})
 
-// 	err := tupaCtx.SendString(http.StatusOK, "Hello, World!")
-// 	if err != nil {
-// 		t.Error(err)
-// 	}
-// }
+		tc := &TupaContext{
+			request: req,
+		}
+
+		got := tc.Param("id")
+		want := "123"
+		if got != want {
+			t.Errorf("Parametro retornado %s, queria %s", got, want)
+		}
+	})
+
+	t.Run("Teste método Param sem parametro", func(t *testing.T) {
+		req, err := http.NewRequest("GET", "/users/123", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		tc := &TupaContext{
+			request: req,
+		}
+
+		got := tc.Param("id")
+		want := ""
+		if got != want {
+			t.Errorf("Parametro retornado %s, queria %s", got, want)
+		}
+	})
+}
