@@ -31,11 +31,6 @@ func FmtYellow(s string) string {
 	return string("\033[1;33m ") + s + string("\033[0m")
 }
 
-// type Controller interface{
-// 	RegisterRoutes(router *mux.Router, route string, handlers map[HTTPMethod]APIFunc)
-// 	MakeHTTPHandlerFuncHelper(f APIFunc, httpMethod HTTPMethod) http.HandlerFunc
-// }
-
 type (
 	Context interface {
 		Request() *http.Request
@@ -143,28 +138,37 @@ func WelcomeHandler(w http.ResponseWriter, r *http.Request) {
 	WriteJSONHelper(w, http.StatusOK, "Seja bem vindo ao Tupã framework!")
 }
 
-func (dc *DefaultController) RegisterRoutes(route string, handlers map[HTTPMethod]APIFunc) {
-	// fmt.Println(handlers)
+func (dc *DefaultController) RegisterRoutes(route string, handlers map[HTTPMethod]APIFunc, middlewares ...MiddlewareChain) {
 	for method, handler := range handlers {
 		if !AllowedMethods[method] {
-			log.Fatal(fmt.Sprintf(FmtRed("Método HTTP não permitido: "), "%s\nVeja como criar um novo método na documentação", method))
+			log.Fatalf(fmt.Sprintf(FmtRed("Método HTTP não permitido: "), "%s\nVeja como criar um novo método na documentação", method))
 		}
 
-		// handlerName := getFunctionName(handler)
-		// fmt.Printf("Registering handler %s for %s\n", handlerName, method)
+		// especificando chain de middlewares que devem ser executadas antes do handler de uma rota particular
+		// Na Chain of responsibility, a request é passada pela cadeia de handlers, onde cada handler pode fazer um processamento ou modificação
+		chainHandler := func(tc *TupaContext) error {
+			for _, middlewareChain := range middlewares {
+				if err := middlewareChain.execute(tc); err != nil {
+					return err
+				}
+			}
 
-		dc.router.HandleFunc(route, dc.MakeHTTPHandlerFuncHelper(handler, method)).Methods(string(method))
+			// depois da middleware chain ser processada, chama o handler original
+			return handler(tc)
+		}
+
+		dc.router.HandleFunc(route, dc.MakeHTTPHandlerFuncHelper(chainHandler, method)).Methods(string(method))
 	}
 }
 
 func WriteJSONHelper(w http.ResponseWriter, status int, v any) error {
-	w.Header().Set("Content-Type", "application/json")
-
 	if w == nil {
 		return errors.New("Response writer passado está nulo")
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
+
 	return json.NewEncoder(w).Encode(v)
 }
 
@@ -223,15 +227,14 @@ func (tc *TupaContext) Response() *http.ResponseWriter {
 
 func (tc *TupaContext) SendString(status int, s string) error {
 	// value := ctx.Value("value")
-
 	tc.response.WriteHeader(status)
 	_, err := tc.response.Write([]byte(s))
 	return err
 }
 
 func (tc *TupaContext) Param(param string) string {
-	fmt.Println(mux.Vars(tc.request))
-	fmt.Println(tc.request)
+	// fmt.Println(mux.Vars(tc.request))
+	// fmt.Println(tc.request)
 	return mux.Vars(tc.request)[param]
 }
 
@@ -264,18 +267,64 @@ func HandlePOSTEndpoint(tc *TupaContext) error {
 	return nil
 }
 
-// func LinkMethodToHandler(method HTTPMethod, handler http.HandlerFunc) map[HTTPMethod]http.HandlerFunc {
-// 	return map[HTTPMethod]http.HandlerFunc{
-// 		method: handler,
-// 	}
-// }
-
 func getFunctionName(i interface{}) string {
 	return runtime.FuncForPC(reflect.ValueOf(i).Pointer()).Name()
 }
 
 func handleSendString(tc *TupaContext) error {
+	log.Println("fuck this shit")
 	return tc.SendString(http.StatusOK, "Hello world")
+}
+
+// MIDDLEWARES EXEMPLOS
+
+func LoggingMiddleware(next APIFunc) APIFunc {
+	return func(tc *TupaContext) error {
+		log.Println("Antes de chamar o handler")
+		defer log.Println("Depois de chamar o handler")
+
+		tupaContextWithValue := context.WithValue(tc.request.Context(), "ctxText", "2602")
+
+		tc.request = tc.request.WithContext(tupaContextWithValue)
+		// chamando o handler original
+		return next(tc)
+	}
+}
+
+func HelloWorldMiddleware(next APIFunc) APIFunc {
+	return func(tc *TupaContext) error {
+		log.Println("Hello world Antes de chamar o handler")
+		defer log.Println("Hello world fim")
+
+		// chamando o handler original
+		return next(tc)
+	}
+}
+
+func LoggingMiddlewareAfter(next APIFunc) APIFunc {
+	afterHandler := func(tc *TupaContext) error {
+		defer log.Println("Depois de chamar o handler 2")
+		return next(tc)
+	}
+
+	return afterHandler
+}
+
+func LoggingMiddlewareWithErrorrr(next APIFunc) APIFunc {
+	return func(tc *TupaContext) error {
+
+		// errMsg := errors.New("erro no middleware LoggingMiddlewareWithError")
+		// err := WriteMiddErrorJSONHelper(tc, errMsg)
+		// tc.response.WriteHeader(http.StatusInternalServerError)
+
+		// escrevendo o erro no body da req
+		// tc.response.Write([]byte(`{"Error":"` + "houve um erro" + `"}`))
+
+		ctx := context.WithValue(tc.request.Context(), "smpErrorMidd", "sampleErrorMiddleware")
+		tc.request = tc.request.WithContext(ctx)
+
+		return errors.New("erro no middleware LoggingMiddlewareWithError")
+	}
 }
 
 // user
@@ -306,41 +355,53 @@ func main() {
 	// 	tupa.MethodGet: PassingCtxCatData,
 	// })
 
-	testSendString := NewController()
-	testSendString.RegisterRoutes("/ss", map[HTTPMethod]APIFunc{
-		MethodGet: handleSendString,
-	})
+	// testSendString := NewController()
+	// testSendString.RegisterRoutes("/ss", map[HTTPMethod]APIFunc{
+	// 	MethodGet: LoggingMiddleware(handleSendString),
+	// })
 
-	testGracefulShutdown := NewController()
-	testGracefulShutdown.RegisterRoutes("/shutdown", map[HTTPMethod]APIFunc{
-		MethodPost: HandlePOSTEndpoint,
-	})
+	// testGracefulShutdown := NewController()
+	// testGracefulShutdown.RegisterRoutes("/shutdown", map[HTTPMethod]APIFunc{
+	// 	MethodPost: HandlePOSTEndpoint,
+	// })
 
-	testCatDataController := NewController()
-	testCatDataController.RegisterRoutes("/catdata", map[HTTPMethod]APIFunc{
+	// testCatDataController := NewController()
+	// testCatDataController.RegisterRoutes("/catdata", map[HTTPMethod]APIFunc{
+	// 	MethodGet: PassingCtxCatData,
+	// })
+
+	// testParamChain := MiddlewareChain{}
+	// testParamChain.Use(LoggingMiddleware, LoggingMiddlewareAfter)
+
+	// testGetParam := NewController()
+	// testGetParam.RegisterRoutes("/param", map[HTTPMethod]APIFunc{
+	// 	MethodGet: handleSendString,
+	// })
+	// testGetParam.RegisterRoutes("/param/{id}", map[HTTPMethod]APIFunc{
+	// 	MethodGet: func(tc *TupaContext) error {
+	// 		fmt.Println("Chamou o handler")
+	// 		ctxVal := tc.request.Context().Value("ctxText")
+	// 		fmt.Println("Valor do context da req", ctxVal)
+	// 		tc.SendString(http.StatusOK, "HELLO WORLD!"+tc.Param("id"))
+	// 		return nil
+	// 	},
+	// }, testParamChain)
+
+	// middChain := MiddlewareChain{}
+	// middChain.Use(LoggingMiddleware, HelloWorldMiddleware)
+	// middChainController := NewController()
+	// middChainController.RegisterRoutes("/midd", map[HTTPMethod]APIFunc{
+	// 	MethodGet: PassingCtxCatData,
+	// }, middChain)
+
+	testMiddlewareWithError := MiddlewareChain{}
+	testMiddlewareWithError.Use(LoggingMiddlewareWithErrorrr)
+	testMiddlewareWithErrorController := NewController()
+	testMiddlewareWithErrorController.RegisterRoutes("/error", map[HTTPMethod]APIFunc{
 		MethodGet: PassingCtxCatData,
-	})
-
-	testGetParam := NewController()
-	testGetParam.RegisterRoutes("/param", map[HTTPMethod]APIFunc{
-		MethodGet: handleSendString,
-	})
-	testGetParam.RegisterRoutes("/param/{id}", map[HTTPMethod]APIFunc{
-		MethodGet: func(tc *TupaContext) error {
-			tc.SendString(http.StatusOK, "HELLO WORLD!"+tc.Param("id"))
-			return nil
-		},
-	})
+	}, testMiddlewareWithError)
 
 	server.New()
-
-	// var userID string = "userID"
-	// ctx := context.Background()
-
-	// ctx = context.WithValue(ctx, userID, "1")
-
-	// doFetchUserID(ctx)
-
 }
 
 ///////// contexts
