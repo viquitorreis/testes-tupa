@@ -24,7 +24,7 @@ func BenchmarkDirectAccessSendString(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		ctx.SendString(http.StatusOK, "Hello, World!")
+		ctx.SendString("Hello, World!")
 	}
 
 	elapsed := time.Since(start)
@@ -50,7 +50,7 @@ func TestConcurrentSendStringCtxExample(t *testing.T) {
 				Context:  ctx,
 			}
 
-			err := tupaCtx.SendString(http.StatusOK, "Hello, World!")
+			err := tupaCtx.SendString("Hello, World!")
 			if err != nil {
 				panic(err)
 			}
