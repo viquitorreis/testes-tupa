@@ -11,7 +11,6 @@ import (
 	"os/signal"
 	"reflect"
 	"runtime"
-	"sync"
 	"syscall"
 	"time"
 
@@ -35,7 +34,7 @@ type (
 	Context interface {
 		Request() *http.Request
 		Response() http.ResponseWriter
-		SendString(status int, s string) error
+		SendString(s string) error
 		Param(param string) string
 	}
 
@@ -49,18 +48,16 @@ type (
 type APIFunc func(*TupaContext) error
 
 type APIServer struct {
-	listenAddr string
-	server     *http.Server
+	listenAddr        string
+	server            *http.Server
+	globalMiddlewares MiddlewareChain
+	router            *mux.Router
 }
 
 type HTTPMethod string
 
 type APIError struct {
 	Error string
-}
-
-type DefaultController struct {
-	router *mux.Router
 }
 
 const (
@@ -80,19 +77,23 @@ var AllowedMethods = map[HTTPMethod]bool{
 	MethodPatch:  true,
 }
 
-var (
-	globalRouter     *mux.Router
-	globalRouterOnce sync.Once
-)
+type RouteInfo struct {
+	Method      HTTPMethod
+	Handler     APIFunc
+	Middlewares []MiddlewareFunc
+}
 
 func (a *APIServer) New() {
-	globalRouter = getGlobalRouter()
-
-	if globalRouter.GetRoute("/") == nil {
-		globalRouter.HandleFunc("/", WelcomeHandler).Methods(http.MethodGet)
+	if a.router.GetRoute("/") == nil {
+		a.RegisterRoutes("/", []RouteInfo{
+			{
+				Method:  MethodGet,
+				Handler: WelcomeHandler,
+			},
+		}, a.globalMiddlewares)
 	}
 
-	routerHandler := cors.Default().Handler(globalRouter)
+	routerHandler := cors.Default().Handler(a.router)
 
 	a.server = &http.Server{
 		Addr:    a.listenAddr,
@@ -122,36 +123,39 @@ func (a *APIServer) New() {
 	fmt.Println(FmtYellow("Servidor encerrado na porta: " + a.listenAddr))
 }
 
-func NewApiServer(listenAddr string) *APIServer {
+func NewAPIServer(listenAddr string) *APIServer {
+	router := mux.NewRouter()
+
 	return &APIServer{
-		listenAddr: listenAddr,
+		listenAddr:        listenAddr,
+		router:            router,
+		globalMiddlewares: MiddlewareChain{},
 	}
 }
 
-// func (dc *DefaultController) SetDefaultRoute(handlers map[HTTPMethod]APIFunc) {
-// 	for method, handler := range handlers {
-// 		dc.router.HandleFunc("/", dc.MakeHTTPHandlerFuncHelper(handler, method)).Methods(string(method))
-// 	}
-// }
-
-func WelcomeHandler(w http.ResponseWriter, r *http.Request) {
-	WriteJSONHelper(w, http.StatusOK, "Seja bem vindo ao Tupã framework!")
+func WelcomeHandler(tc *TupaContext) error {
+	WriteJSONHelper(tc.response, http.StatusOK, "Seja bem vindo ao Tupã framework!")
+	return nil
 }
 
-type RouteInfo struct {
-	Method  HTTPMethod
-	Handler APIFunc
-}
-
-func (dc *DefaultController) RegisterRoutes(route string, routeInfos []RouteInfo, middlewares ...MiddlewareChain) {
+func (a *APIServer) RegisterRoutes(route string, routeInfos []RouteInfo, middlewares ...MiddlewareChain) {
 	for _, routeInfo := range routeInfos {
 		if !AllowedMethods[routeInfo.Method] {
 			log.Fatalf(fmt.Sprintf(FmtRed("Método HTTP não permitido: "), "%s\nVeja como criar um novo método na documentação", routeInfo.Method))
 		}
 
-		handler := dc.MakeHTTPHandlerFuncHelper(routeInfo, middlewares...)
+		var allMiddlewares MiddlewareChain
+		middlewaresGlobais := a.GetGlobalMiddlewares()
 
-		dc.router.HandleFunc(route, handler).Methods(string(routeInfo.Method))
+		allMiddlewares = append(allMiddlewares, middlewaresGlobais...)
+
+		for _, mc := range middlewares {
+			allMiddlewares = append(allMiddlewares, mc...)
+		}
+
+		handler := a.MakeHTTPHandlerFuncHelper(routeInfo, allMiddlewares, a.globalMiddlewares)
+
+		a.router.HandleFunc(route, handler).Methods(string(routeInfo.Method))
 	}
 }
 
@@ -166,44 +170,25 @@ func WriteJSONHelper(w http.ResponseWriter, status int, v any) error {
 	return json.NewEncoder(w).Encode(v)
 }
 
-// func (dc *DefaultController) MakeHTTPHandlerFuncHelper(f APIFunc, httpMethod HTTPMethod) http.HandlerFunc {
-// 	return func(w http.ResponseWriter, r *http.Request) {
-// 		ctx := r.Context()
-// 		if r.Method == string(httpMethod) {
-// 			if err := f(ctx, w, r); err != nil {
-// 				if err := WriteJSONHelper(w, http.StatusInternalServerError, APIError{Error: err.Error()}); err != nil {
-// 					fmt.Println("Erro ao escrever resposta JSON:", err)
-// 				}
-// 			}
-// 		} else {
-// 			WriteJSONHelper(w, http.StatusMethodNotAllowed, APIError{Error: "Método HTTP não permitido"})
-// 		}
-// 	}
-// }
-
-func (dc *DefaultController) MakeHTTPHandlerFuncHelper(routeInfo RouteInfo, middlewares ...MiddlewareChain) http.HandlerFunc {
-	fmt.Println("MakeHTTPHandlerFuncHelper")
+func (a *APIServer) MakeHTTPHandlerFuncHelper(routeInfo RouteInfo, middlewares MiddlewareChain, globalMiddlewares MiddlewareChain) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := &TupaContext{
 			request:  r,
 			response: w,
 		}
 
-		for _, middlewareChain := range middlewares {
-			if err := middlewareChain.execute(ctx); err != nil {
-				// Handle middleware error
-				WriteJSONHelper(w, http.StatusInternalServerError, APIError{Error: err.Error()})
-				return
-			}
-		}
+		// Combina middlewares globais com os especificos de rota
+		allMiddlewares := MiddlewareChain{}
+		allMiddlewares = append(allMiddlewares, a.GetGlobalMiddlewares()...)
+		allMiddlewares = append(allMiddlewares, routeInfo.Middlewares...)
 
-		// for _, middlewareChain := range middlewares {
-		// 	if err := middlewareChain.execute(ctx); err != nil {
-		// 		// Handle middleware error
-		// 		WriteJSONHelper(w, http.StatusInternalServerError, APIError{Error: err.Error()})
-		// 		return
-		// 	}
-		// }
+		doneCh := a.executeMiddlewaresAsync(ctx, allMiddlewares)
+		errorsSlice := <-doneCh // espera até que algum valor seja recebido. Continua no primeiro erro recebido ( se houver ) ou se não houver nenhum erro
+
+		if len(errorsSlice) > 0 {
+			WriteJSONHelper(w, http.StatusInternalServerError, APIError{Error: errorsSlice[0].Error()})
+			return
+		}
 
 		if r.Method == string(routeInfo.Method) {
 			if err := routeInfo.Handler(ctx); err != nil {
@@ -214,25 +199,20 @@ func (dc *DefaultController) MakeHTTPHandlerFuncHelper(routeInfo RouteInfo, midd
 		} else {
 			WriteJSONHelper(w, http.StatusMethodNotAllowed, APIError{Error: "Método HTTP não permitido"})
 		}
-		// if err := routeInfo.Handler(ctx); err != nil {
-		// 	// Handle handler error
-		// 	WriteJSONHelper(w, http.StatusInternalServerError, APIError{Error: err.Error()})
-		// 	return
-		// }
 	}
 }
 
-func NewController() *DefaultController {
-	return &DefaultController{router: getGlobalRouter()} // cria sub rota para a rota
-	// return &DefaultController{router: getGlobalRouter().PathPrefix(baseRoute).Subrouter()} // cria sub rota para a rota
-}
+// func NewController() *APIServer {
+// 	return &APIServer{router: getGlobalRouter()} // cria sub rota para a rota
+// 	// return &DefaultController{router: getGlobalRouter().PathPrefix(baseRoute).Subrouter()} // cria sub rota para a rota
+// }
 
-func getGlobalRouter() *mux.Router {
-	globalRouterOnce.Do(func() {
-		globalRouter = mux.NewRouter()
-	})
-	return globalRouter
-}
+// func getGlobalRouter() *mux.Router {
+// 	globalRouterOnce.Do(func() {
+// 		globalRouter = mux.NewRouter()
+// 	})
+// 	return globalRouter
+// }
 
 func (tc *TupaContext) Request() *http.Request {
 	return tc.request
@@ -248,16 +228,20 @@ func (tc *TupaContext) SendString(s string) error {
 }
 
 func (tc *TupaContext) Param(param string) string {
-	// fmt.Println(mux.Vars(tc.request))
-	// fmt.Println(tc.request)
 	return mux.Vars(tc.request)[param]
 }
 
 // TESTES HANDLERS
 
-func HandleAPIEndpoint(w http.ResponseWriter, r *http.Request) error {
+func HandleAPIEndpoint(tc *TupaContext) error {
 	fmt.Println("Endpoint da API")
-	WriteJSONHelper(w, http.StatusOK, "Endpoint da API")
+	WriteJSONHelper(tc.response, http.StatusOK, "Endpoint da API")
+	return nil
+}
+
+func HandleAPIEndpoint3(tc *TupaContext) error {
+	fmt.Println("Endpoint da HandleAPIEndpoint3")
+	WriteJSONHelper(tc.response, http.StatusOK, "Endpoint da HandleAPIEndpoint3")
 	return nil
 }
 
@@ -354,51 +338,54 @@ func LoggingMiddlewareWithErrorrr(next APIFunc) APIFunc {
 	}
 }
 
+func MiddlewareAPIEndpoint(next APIFunc) APIFunc {
+	return func(tc *TupaContext) error {
+		fmt.Println("Middleware API Endpoint GLOBAL")
+		return next(tc)
+	}
+}
+
+func MiddlewarePost(next APIFunc) APIFunc {
+	return func(tc *TupaContext) error {
+		fmt.Println("MiddlewarePost")
+		return next(tc)
+	}
+}
+
+func MiddlewareSampleErr(next APIFunc) APIFunc {
+	return func(tc *TupaContext) error {
+		fmt.Println("MiddlewareSampleErr")
+		return errors.New("Erro no middleware MiddlewareSampleErr")
+	}
+}
+func MiddlewareSampleErr2(next APIFunc) APIFunc {
+	return func(tc *TupaContext) error {
+		fmt.Println("MiddlewareSampleErr2")
+		return errors.New("Erro no middleware MiddlewareSampleErr2")
+	}
+}
+
+func MiddlewareGLOBAL(next APIFunc) APIFunc {
+	return func(tc *TupaContext) error {
+		fmt.Println("MiddlewareGLOBAL")
+		return next(tc)
+	}
+}
+
 // user
 func main() {
-	server := NewApiServer(":6969")
-	// srv := tupa.NewApiServer(":6968")
-	// testGracShutdown := tupa.Controller{}
-	// testGracShutdown.RegisterRoutes(srv.Router, "/shutdown", map[tupa.HTTPMethod]tupa.APIFunc{
-	// 	tupa.MethodPost: HandlePOSTEndpoint,
-	// })
-	// srv.New()
+	server := NewAPIServer(":6969")
+	server.UseGlobalMiddleware(MiddlewareAPIEndpoint, MiddlewareGLOBAL)
 
-	// testGracefulShutdown := NewController()
-	// testGracefulShutdown.RegisterRoutes("/shutdown", map[HTTPMethod]APIFunc{
-	// 	MethodPost: HandlePOSTEndpoint,
-	// 	MethodGet:  PassingCtxCatData,
-	// })
+	// middlewares := server.GetGlobalMiddlewares()
+	// for _, middleware := range middlewares {
+	// 	res := fmt.Sprintf("%+v\n", middleware)
+	// 	fmt.Println("Hello world")
+	// 	fmt.Println(res)
+	// }
 
-	// catDataEndpoint := NewController()
-	// catDataEndpoint.RegisterRoutes("/catdata", map[HTTPMethod]APIFunc{
-	// 	MethodGet: PassingCtxCatData,
-	// })
-
-	// server.New()
-
-	// testGracefulShutdown := tupa.NewController()
-	// testGracefulShutdown.RegisterRoutes("/catdata", map[tupa.HTTPMethod]tupa.APIFunc{
-	// 	tupa.MethodGet: PassingCtxCatData,
-	// })
-
-	// testSendString := NewController()
-	// testSendString.RegisterRoutes("/ss", map[HTTPMethod]APIFunc{
-	// 	MethodGet: LoggingMiddleware(handleSendString),
-	// })
-
-	// testGracefulShutdown := NewController()
-	// testGracefulShutdown.RegisterRoutes("/shutdown", map[HTTPMethod]APIFunc{
-	// 	MethodPost: HandlePOSTEndpoint,
-	// })
-
-	// testCatDataController := NewController()
-	// testCatDataController.RegisterRoutes("/catdata", map[HTTPMethod]APIFunc{
-	// 	MethodGet: PassingCtxCatData,
-	// })
-
-	// testParamChain := MiddlewareChain{}
-	// testParamChain.Use(LoggingMiddleware, LoggingMiddlewareAfter)
+	// globalMiddlewares := MiddlewareChain{}
+	// globalMiddlewares.Use(LoggingMiddlewareAfter)
 
 	// testGetParam := NewController()
 	// testGetParam.RegisterRoutes("/param", map[HTTPMethod]APIFunc{
@@ -421,19 +408,69 @@ func main() {
 	// 	MethodGet: PassingCtxCatData,
 	// }, middChain)
 
-	testMiddlewareWithError := MiddlewareChain{}
-	testMiddlewareWithError.Use(LoggingMiddlewareAfter, HelloWorldMiddleware)
-	testMiddlewareWithErrorController := NewController()
-	testMiddlewareWithErrorController.RegisterRoutes("/error", []RouteInfo{
+	// testMiddlewareWithError := MiddlewareChain{}
+	// testMiddlewareWithError.Use(LoggingMiddlewareAfter, HelloWorldMiddleware, LoggingMiddleware, LoggingMiddlewareWithErrorrr)
+
+	// testMiddlewareWithErrorController := NewController()
+	// testMiddlewareWithErrorController.RegisterRoutes("/error", []RouteInfo{
+	// 	{
+	// 		Method:      MethodGet,
+	// 		Handler:     PassingCtxCatData,
+	// 		Middlewares: []MiddlewareFunc{LoggingMiddlewareAfter, HelloWorldMiddleware, LoggingMiddleware},
+	// 	},
+	// 	{
+	// 		Method:  MethodPost,
+	// 		Handler: HandlePOSTEndpoint,
+	// 	},
+	// })
+
+	// contr2 := NewController()
+
+	// contr2.RegisterRoutes("/c2", []RouteInfo{
+	// 	{
+	// 		Method:      MethodGet,
+	// 		Handler:     HandleAPIEndpoint,
+	// 		Middlewares: []MiddlewareFunc{},
+	// 	},
+	// 	{
+	// 		Method:      MethodPost,
+	// 		Handler:     HandlePOSTEndpoint,
+	// 		Middlewares: []MiddlewareFunc{MiddlewareSampleErr, MiddlewareSampleErr2, MiddlewarePost},
+	// 	},
+	// })
+
+	routeInfo := RouteInfo{
+		Method:      MethodGet,
+		Handler:     HandleAPIEndpoint,
+		Middlewares: []MiddlewareFunc{MiddlewarePost},
+	}
+
+	// routeInfo2 := []RouteInfo{
+	// 	{
+	// 		Method:      MethodGet,
+	// 		Handler:     HandleAPIEndpoint3,
+	// 		Middlewares: []MiddlewareFunc{MiddlewarePost},
+	// 	},
+	// 	{
+	// 		Method:      MethodPost,
+	// 		Handler:     HandlePOSTEndpoint,
+	// 		Middlewares: []MiddlewareFunc{MiddlewarePost},
+	// 	},
+	// }
+
+	server.RegisterRoutes("/c2", []RouteInfo{routeInfo})
+	server.RegisterRoutes("/c3", []RouteInfo{
 		{
-			Method:  MethodGet,
-			Handler: PassingCtxCatData,
+			Method:      MethodGet,
+			Handler:     handleSendString,
+			Middlewares: []MiddlewareFunc{MiddlewarePost},
 		},
 		{
-			Method:  MethodPost,
-			Handler: HandlePOSTEndpoint,
+			Method:      MethodPost,
+			Handler:     HandlePOSTEndpoint,
+			Middlewares: []MiddlewareFunc{MiddlewarePost},
 		},
-	}, testMiddlewareWithError)
+	})
 
 	server.New()
 }
