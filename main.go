@@ -78,6 +78,7 @@ var AllowedMethods = map[HTTPMethod]bool{
 }
 
 type RouteInfo struct {
+	Path        string
 	Method      HTTPMethod
 	Handler     APIFunc
 	Middlewares []MiddlewareFunc
@@ -85,12 +86,13 @@ type RouteInfo struct {
 
 func (a *APIServer) New() {
 	if a.router.GetRoute("/") == nil {
-		a.RegisterRoutes("/", []RouteInfo{
+		a.RegisterRoutes([]RouteInfo{
 			{
+				Path:    "/",
 				Method:  MethodGet,
 				Handler: WelcomeHandler,
 			},
-		}, a.globalMiddlewares)
+		})
 	}
 
 	routerHandler := cors.Default().Handler(a.router)
@@ -138,7 +140,7 @@ func WelcomeHandler(tc *TupaContext) error {
 	return nil
 }
 
-func (a *APIServer) RegisterRoutes(route string, routeInfos []RouteInfo, middlewares ...MiddlewareChain) {
+func (a *APIServer) RegisterRoutes(routeInfos []RouteInfo) {
 	for _, routeInfo := range routeInfos {
 		if !AllowedMethods[routeInfo.Method] {
 			log.Fatalf(fmt.Sprintf(FmtRed("Método HTTP não permitido: "), "%s\nVeja como criar um novo método na documentação", routeInfo.Method))
@@ -149,13 +151,9 @@ func (a *APIServer) RegisterRoutes(route string, routeInfos []RouteInfo, middlew
 
 		allMiddlewares = append(allMiddlewares, middlewaresGlobais...)
 
-		for _, mc := range middlewares {
-			allMiddlewares = append(allMiddlewares, mc...)
-		}
-
 		handler := a.MakeHTTPHandlerFuncHelper(routeInfo, allMiddlewares, a.globalMiddlewares)
 
-		a.router.HandleFunc(route, handler).Methods(string(routeInfo.Method))
+		a.router.HandleFunc(routeInfo.Path, handler).Methods(string(routeInfo.Method))
 	}
 }
 
@@ -345,6 +343,27 @@ func MiddlewareAPIEndpoint(next APIFunc) APIFunc {
 	}
 }
 
+func MiddlewareContrA(next APIFunc) APIFunc {
+	return func(tc *TupaContext) error {
+		fmt.Println("Middleware MiddlewareContrA")
+		return next(tc)
+	}
+}
+
+func MiddlewareContrB(next APIFunc) APIFunc {
+	return func(tc *TupaContext) error {
+		fmt.Println("Middleware MiddlewareContrB")
+		return next(tc)
+	}
+}
+
+func MiddlewareContrC(next APIFunc) APIFunc {
+	return func(tc *TupaContext) error {
+		fmt.Println("Middleware MiddlewareContrC")
+		return next(tc)
+	}
+}
+
 func MiddlewarePost(next APIFunc) APIFunc {
 	return func(tc *TupaContext) error {
 		fmt.Println("MiddlewarePost")
@@ -440,37 +459,43 @@ func main() {
 	// })
 
 	routeInfo := RouteInfo{
+		Path:        "/c2",
 		Method:      MethodGet,
 		Handler:     HandleAPIEndpoint,
 		Middlewares: []MiddlewareFunc{MiddlewarePost},
 	}
 
-	// routeInfo2 := []RouteInfo{
-	// 	{
-	// 		Method:      MethodGet,
-	// 		Handler:     HandleAPIEndpoint3,
-	// 		Middlewares: []MiddlewareFunc{MiddlewarePost},
-	// 	},
-	// 	{
-	// 		Method:      MethodPost,
-	// 		Handler:     HandlePOSTEndpoint,
-	// 		Middlewares: []MiddlewareFunc{MiddlewarePost},
-	// 	},
-	// }
-
-	server.RegisterRoutes("/c2", []RouteInfo{routeInfo})
-	server.RegisterRoutes("/c3", []RouteInfo{
+	server.RegisterRoutes([]RouteInfo{routeInfo})
+	server.RegisterRoutes([]RouteInfo{
 		{
+			Path:        "/c3",
 			Method:      MethodGet,
 			Handler:     handleSendString,
-			Middlewares: []MiddlewareFunc{MiddlewarePost},
+			Middlewares: []MiddlewareFunc{HelloWorldMiddleware},
 		},
 		{
+			Path:        "/c3",
 			Method:      MethodPost,
 			Handler:     HandlePOSTEndpoint,
 			Middlewares: []MiddlewareFunc{MiddlewarePost},
 		},
 	})
+
+	// server.RegisterRoutes(Routes)
+
+	// ri := reflect.TypeOf(&RouteInfo{})
+	// // ctrAVal := reflect.ValueOf(&CntrA{Routes: &Routes{}})
+	// fmt.Println("--- Calling methods ---")
+	// for i := 0; i < ri.NumMethod(); i++ {
+	// 	method := ri.Method(i)
+	// 	fmt.Println(method.Name)
+	// 	// ctrAVal.MethodByName(method.Name).Call([]reflect.Value{})
+	// 	// method.Func.Call([]reflect.Value{ctrAVal})
+	// }
+	// AddRoutes(nil, ContrARoutes, ContrBRoutes)
+	// fmt.Println(GetRoutes())
+	ExampleRouteManager()
+	server.RegisterRoutes(GetRoutes())
 
 	server.New()
 }
