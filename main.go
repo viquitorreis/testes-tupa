@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Iuptec/tupa"
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
 )
@@ -36,6 +37,8 @@ type (
 		Response() http.ResponseWriter
 		SendString(s string) error
 		Param(param string) string
+		QueryParam(param string) string
+		QueryParams() map[string][]string
 	}
 
 	TupaContext struct {
@@ -229,6 +232,14 @@ func (tc *TupaContext) Param(param string) string {
 	return mux.Vars(tc.request)[param]
 }
 
+func (tc *TupaContext) QueryParam(param string) string {
+	return tc.request.URL.Query().Get(param)
+}
+
+func (tc *TupaContext) QueryParams() map[string][]string {
+	return tc.request.URL.Query()
+}
+
 // TESTES HANDLERS
 
 func HandleAPIEndpoint(tc *TupaContext) error {
@@ -270,6 +281,21 @@ func getFunctionName(i interface{}) string {
 
 func handleSendString(tc *TupaContext) error {
 	return tc.SendString("Hello world")
+}
+
+func HandleEndpointQueryParam(tc *TupaContext) error {
+	param := tc.QueryParam("name")
+	tc.SendString("Hello " + param)
+	return nil
+}
+
+func HandleEndpointQueryParams(tc *TupaContext) error {
+	param := tc.QueryParams()
+	fmt.Println(param)
+	fmt.Println(param["idade"])
+	fmt.Println(param["name"])
+	tc.SendString("Hello " + param["name"][0])
+	return nil
 }
 
 func PrintRoutes(router *mux.Router) {
@@ -394,110 +420,131 @@ func MiddlewareGLOBAL(next APIFunc) APIFunc {
 // user
 func main() {
 	server := NewAPIServer(":6969")
-	server.UseGlobalMiddleware(MiddlewareAPIEndpoint, MiddlewareGLOBAL)
+	// server.UseGlobalMiddleware(MiddlewareAPIEndpoint, MiddlewareGLOBAL)
 
-	// middlewares := server.GetGlobalMiddlewares()
-	// for _, middleware := range middlewares {
-	// 	res := fmt.Sprintf("%+v\n", middleware)
-	// 	fmt.Println("Hello world")
-	// 	fmt.Println(res)
-	// }
+	// srv := tupa.NewAPIServer(":6969")
+	// srv.UseGlobalMiddleware(MiddlewareGLOBALTupa)
 
-	// globalMiddlewares := MiddlewareChain{}
-	// globalMiddlewares.Use(LoggingMiddlewareAfter)
-
-	// testGetParam := NewController()
-	// testGetParam.RegisterRoutes("/param", map[HTTPMethod]APIFunc{
-	// 	MethodGet: handleSendString,
-	// })
-	// testGetParam.RegisterRoutes("/param/{id}", map[HTTPMethod]APIFunc{
-	// 	MethodGet: func(tc *TupaContext) error {
-	// 		fmt.Println("Chamou o handler")
-	// 		ctxVal := tc.request.Context().Value("ctxText")
-	// 		fmt.Println("Valor do context da req", ctxVal)
-	// 		tc.SendString(http.StatusOK, "HELLO WORLD!"+tc.Param("id"))
-	// 		return nil
-	// 	},
-	// }, testParamChain)
-
-	// middChain := MiddlewareChain{}
-	// middChain.Use(LoggingMiddleware, HelloWorldMiddleware)
-	// middChainController := NewController()
-	// middChainController.RegisterRoutes("/midd", map[HTTPMethod]APIFunc{
-	// 	MethodGet: PassingCtxCatData,
-	// }, middChain)
-
-	// testMiddlewareWithError := MiddlewareChain{}
-	// testMiddlewareWithError.Use(LoggingMiddlewareAfter, HelloWorldMiddleware, LoggingMiddleware, LoggingMiddlewareWithErrorrr)
-
-	// testMiddlewareWithErrorController := NewController()
-	// testMiddlewareWithErrorController.RegisterRoutes("/error", []RouteInfo{
-	// 	{
-	// 		Method:      MethodGet,
-	// 		Handler:     PassingCtxCatData,
-	// 		Middlewares: []MiddlewareFunc{LoggingMiddlewareAfter, HelloWorldMiddleware, LoggingMiddleware},
-	// 	},
-	// 	{
-	// 		Method:  MethodPost,
-	// 		Handler: HandlePOSTEndpoint,
-	// 	},
-	// })
-
-	// contr2 := NewController()
-
-	// contr2.RegisterRoutes("/c2", []RouteInfo{
-	// 	{
-	// 		Method:      MethodGet,
-	// 		Handler:     HandleAPIEndpoint,
-	// 		Middlewares: []MiddlewareFunc{},
-	// 	},
-	// 	{
-	// 		Method:      MethodPost,
-	// 		Handler:     HandlePOSTEndpoint,
-	// 		Middlewares: []MiddlewareFunc{MiddlewareSampleErr, MiddlewareSampleErr2, MiddlewarePost},
-	// 	},
-	// })
-
-	routeInfo := RouteInfo{
-		Path:        "/c2",
-		Method:      MethodGet,
-		Handler:     HandleAPIEndpoint,
-		Middlewares: []MiddlewareFunc{MiddlewarePost},
+	routeInfo := []RouteInfo{
+		{
+			Path:        "/c2",
+			Method:      "GET",
+			Handler:     HandleEndpointQueryParams,
+			Middlewares: []MiddlewareFunc{MiddlewareGLOBAL},
+		},
+		{
+			Path:        "/c3",
+			Method:      "GET",
+			Handler:     HandleEndpointQueryParams,
+			Middlewares: []MiddlewareFunc{MiddlewareGLOBAL},
+		},
 	}
 
-	server.RegisterRoutes([]RouteInfo{routeInfo})
-	server.RegisterRoutes([]RouteInfo{
-		{
-			Path:        "/c3",
-			Method:      MethodGet,
-			Handler:     handleSendString,
-			Middlewares: []MiddlewareFunc{HelloWorldMiddleware},
-		},
-		{
-			Path:        "/c3",
-			Method:      MethodPost,
-			Handler:     HandlePOSTEndpoint,
-			Middlewares: []MiddlewareFunc{MiddlewarePost},
-		},
-	})
+	server.RegisterRoutes(routeInfo)
+	// server.RegisterRoutes([]RouteInfo{
+	// 	{
+	// 		Path:        "/c3",
+	// 		Method:      MethodGet,
+	// 		Handler:     handleSendString,
+	// 		Middlewares: []MiddlewareFunc{HelloWorldMiddleware},
+	// 	},
+	// 	{
+	// 		Path:        "/c3",
+	// 		Method:      MethodPost,
+	// 		Handler:     HandlePOSTEndpoint,
+	// 		Middlewares: []MiddlewareFunc{MiddlewarePost},
+	// 	},
+	// })
 
 	// server.RegisterRoutes(Routes)
 
-	// ri := reflect.TypeOf(&RouteInfo{})
-	// // ctrAVal := reflect.ValueOf(&CntrA{Routes: &Routes{}})
-	// fmt.Println("--- Calling methods ---")
-	// for i := 0; i < ri.NumMethod(); i++ {
-	// 	method := ri.Method(i)
-	// 	fmt.Println(method.Name)
-	// 	// ctrAVal.MethodByName(method.Name).Call([]reflect.Value{})
-	// 	// method.Func.Call([]reflect.Value{ctrAVal})
-	// }
-	// AddRoutes(nil, ContrARoutes, ContrBRoutes)
-	// fmt.Println(GetRoutes())
-	ExampleRouteManager()
+	// server.New()
+	// ExampleRouteManagerTupa()
+	// srv.RegisterRoutes(tupa.GetRoutes())
 	server.RegisterRoutes(GetRoutes())
-
 	server.New()
 }
 
-///////// contexts
+// ////////// testes pkt tupa
+func MiddlewareGLOBALTupa(next tupa.APIFunc) tupa.APIFunc {
+	return func(tc *tupa.TupaContext) error {
+		fmt.Println("MiddlewareGLOBAL")
+		return next(tc)
+	}
+}
+
+func HandleAPIEndpointTupa(tc *tupa.TupaContext) error {
+	fmt.Println("Endpoint da API")
+	tupa.WriteJSONHelper(*tc.Response(), http.StatusOK, "Endpoint da API")
+	return nil
+}
+
+func MiddlewareContrATupa(next tupa.APIFunc) tupa.APIFunc {
+	return func(tc *tupa.TupaContext) error {
+		fmt.Println("Middleware MiddlewareContrA")
+		return next(tc)
+	}
+}
+
+func MiddlewareContrBTupa(next tupa.APIFunc) tupa.APIFunc {
+	return func(tc *tupa.TupaContext) error {
+		fmt.Println("Middleware MiddlewareContrB")
+		return next(tc)
+	}
+}
+
+func MiddlewareContrCTupa(next tupa.APIFunc) tupa.APIFunc {
+	return func(tc *tupa.TupaContext) error {
+		fmt.Println("Middleware MiddlewareContrC")
+		return next(tc)
+	}
+}
+
+func ExampleRouteManagerTupa() {
+	tupa.AddRoutes(tupa.MiddlewareChain{MiddlewareContrATupa, MiddlewareContrBTupa}, ContrARoutesTupa)
+
+	tupa.AddRoutes(tupa.MiddlewareChain{MiddlewareContrBTupa}, ContrBRoutesTupa)
+
+	tupa.AddRoutes(tupa.MiddlewareChain{MiddlewareContrCTupa}, ContrCRoutesTupa)
+}
+
+func ContrARoutesTupa() []tupa.RouteInfo {
+	return []tupa.RouteInfo{
+		{
+			Path:        "/contrA",
+			Method:      "GET",
+			Handler:     handleSendStringTupa,
+			Middlewares: nil,
+		},
+		{
+			Path:        "/contrA",
+			Method:      "POST",
+			Handler:     handleSendStringTupa,
+			Middlewares: nil,
+		},
+	}
+}
+
+func handleSendStringTupa(tc *tupa.TupaContext) error {
+	return tc.SendString("Hello world")
+}
+
+func ContrBRoutesTupa() []tupa.RouteInfo {
+	return []tupa.RouteInfo{
+		{
+			Path:    "/contrB",
+			Method:  "POST",
+			Handler: handleSendStringTupa,
+		},
+	}
+}
+
+func ContrCRoutesTupa() []tupa.RouteInfo {
+	return []tupa.RouteInfo{
+		{
+			Path:    "/contrC",
+			Method:  "POST",
+			Handler: handleSendStringTupa,
+		},
+	}
+}
