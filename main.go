@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -13,6 +14,8 @@ import (
 	"runtime"
 	"syscall"
 	"time"
+
+	// pages "https://github.com/viquitorreis/testes-tupa/pages"
 
 	"github.com/Iuptec/tupa"
 	"github.com/gorilla/mux"
@@ -240,6 +243,13 @@ func (tc *TupaContext) QueryParams() map[string][]string {
 	return tc.request.URL.Query()
 }
 
+func (tc *TupaContext) NewTupaContext(w http.ResponseWriter, r *http.Request) *TupaContext {
+	return &TupaContext{
+		request:  r,
+		response: w,
+	}
+}
+
 // TESTES HANDLERS
 
 func HandleAPIEndpoint(tc *TupaContext) error {
@@ -286,6 +296,12 @@ func handleSendString(tc *TupaContext) error {
 func HandleEndpointQueryParam(tc *TupaContext) error {
 	param := tc.QueryParam("name")
 	tc.SendString("Hello " + param)
+	return nil
+}
+
+func HandleGetParam(tc *tupa.TupaContext) error {
+	param := tc.QueryParams()
+	tc.SendString("Hello " + param["name"][0])
 	return nil
 }
 
@@ -419,28 +435,29 @@ func MiddlewareGLOBAL(next APIFunc) APIFunc {
 
 // user
 func main() {
-	server := NewAPIServer(":6969")
+	// server := tupa.NewAPIServer(":6969")
 	// server.UseGlobalMiddleware(MiddlewareAPIEndpoint, MiddlewareGLOBAL)
 
 	// srv := tupa.NewAPIServer(":6969")
 	// srv.UseGlobalMiddleware(MiddlewareGLOBALTupa)
 
-	routeInfo := []RouteInfo{
-		{
-			Path:        "/c2",
-			Method:      "GET",
-			Handler:     HandleEndpointQueryParams,
-			Middlewares: []MiddlewareFunc{MiddlewareGLOBAL},
-		},
-		{
-			Path:        "/c3",
-			Method:      "GET",
-			Handler:     HandleEndpointQueryParams,
-			Middlewares: []MiddlewareFunc{MiddlewareGLOBAL},
-		},
-	}
+	// routeInfo := []RouteInfo{
+	// 	{
+	// 		Path:        "/c2",
+	// 		Method:      "GET",
+	// 		Handler:     HandleEndpointQueryParams,
+	// 		Middlewares: []MiddlewareFunc{MiddlewareGLOBAL},
+	// 	},
+	// 	{
+	// 		Path:        "/c3",
+	// 		Method:      "GET",
+	// 		Handler:     HandleEndpointQueryParams,
+	// 		Middlewares: []MiddlewareFunc{MiddlewareGLOBAL},
+	// 	},
+	// }
 
-	server.RegisterRoutes(routeInfo)
+	// server.RegisterRoutes(routeInfo)
+
 	// server.RegisterRoutes([]RouteInfo{
 	// 	{
 	// 		Path:        "/c3",
@@ -460,8 +477,20 @@ func main() {
 
 	// server.New()
 	// ExampleRouteManagerTupa()
-	// srv.RegisterRoutes(tupa.GetRoutes())
-	server.RegisterRoutes(GetRoutes())
+	// server.RegisterRoutes(tupa.GetRoutes())
+	// server.New()
+
+	server := NewAPIServer(":6969")
+	server.RegisterRoutes([]RouteInfo{
+		{
+			Path:   "/upload",
+			Method: "POST",
+			Handler: func(tc *TupaContext) error {
+				return tc.SendString("Hello world")
+			},
+		},
+	})
+
 	server.New()
 }
 
@@ -511,22 +540,107 @@ func ExampleRouteManagerTupa() {
 func ContrARoutesTupa() []tupa.RouteInfo {
 	return []tupa.RouteInfo{
 		{
-			Path:        "/contrA",
+			Path:        "/auth/google/login",
 			Method:      "GET",
-			Handler:     handleSendStringTupa,
+			Handler:     handleGoogleAuth,
 			Middlewares: nil,
 		},
 		{
-			Path:        "/contrA",
-			Method:      "POST",
-			Handler:     handleSendStringTupa,
-			Middlewares: nil,
+			Path:    "/auth/google/callback",
+			Method:  "GET",
+			Handler: handleCallBackGoogle,
+		},
+		{
+			Path:    "/callback-gl",
+			Method:  "GET",
+			Handler: HandleLogin,
+		},
+		{
+			Path:   "/auth/google",
+			Method: "GET",
+			Handler: func(tc *tupa.TupaContext) error {
+				ConfigGoogle(tc)
+				return nil
+			},
 		},
 	}
 }
 
+func handleGoogleAuth(tc *tupa.TupaContext) error {
+	// url := googleOauthConfig.AuthCodeURL("state")
+
+	// http.Redirect(*tc.Response(), tc.Request(), "http://localhost:6969/auth/google/login", http.StatusTemporaryRedirect)
+	googleAuth()
+	return nil
+}
+
+func handleGoogleCallback(tc *tupa.TupaContext) error {
+	fmt.Println("handleGoogleCallback")
+	code := tc.Request().FormValue("code")
+	tok, err := googleOauthConfig.Exchange(context.Background(), code)
+	if err != nil {
+		http.Error(*tc.Response(), "Failed to exchange token: "+err.Error(), http.StatusBadRequest)
+		return nil
+	}
+
+	client := googleOauthConfig.Client(context.Background(), tok)
+	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
+	if err != nil {
+		http.Error(*tc.Response(), "Failed to retrieve user info: "+err.Error(), http.StatusInternalServerError)
+		return nil
+	}
+	fmt.Println(resp)
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		http.Error(*tc.Response(), "Failed to read response body: "+err.Error(), http.StatusInternalServerError)
+		return nil
+	}
+
+	var userInfo map[string]interface{}
+	if err := json.Unmarshal(body, &userInfo); err != nil {
+		http.Error(*tc.Response(), "Failed to unmarshal response body: "+err.Error(), http.StatusInternalServerError)
+		return nil
+	}
+
+	name, _ := userInfo["name"].(string)
+	email, _ := userInfo["email"].(string)
+
+	fmt.Printf("Name: %s\n", name)
+	fmt.Printf("Email: %s\n", email)
+
+	return nil
+}
+
 func handleSendStringTupa(tc *tupa.TupaContext) error {
-	return tc.SendString("Hello world")
+	fmt.Println("handleSendStringTupa")
+	return tc.SendString("Hello world oauth")
+}
+
+const IndexPage = `
+<html>
+	<head>
+		<title>OAuth-2 Test</title>
+	</head>
+	<body>
+		<h2>OAuth-2 Test</h2>
+		<p>
+			Login with the following,
+		</p>
+		<ul>
+			<li><a href="/login-gl">Google</a></li>
+		</ul>
+	</body>
+</html>
+`
+
+func handleMain(tc *tupa.TupaContext) error {
+	(*tc.Response()).Header().Set("Content-Type", "text/html; charset=utf-8")
+	(*tc.Response()).WriteHeader(http.StatusOK)
+	(*tc.Response()).Write([]byte(IndexPage))
+
+	return tc.SendString("Hello world oauth")
 }
 
 func ContrBRoutesTupa() []tupa.RouteInfo {
@@ -535,6 +649,11 @@ func ContrBRoutesTupa() []tupa.RouteInfo {
 			Path:    "/contrB",
 			Method:  "POST",
 			Handler: handleSendStringTupa,
+		},
+		{
+			Path:    "/contrB?name={name}",
+			Method:  "GET",
+			Handler: HandleGetParam,
 		},
 	}
 }

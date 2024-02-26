@@ -177,3 +177,24 @@ func TestQueryParams(t *testing.T) {
 		}
 	})
 }
+
+func TestNewTupaContext(t *testing.T) {
+	// Create a mock http.ResponseWriter
+	w := httptest.NewRecorder()
+
+	r := httptest.NewRequest("GET", "http://example.com", nil)
+
+	tc := &TupaContext{}
+
+	// Call the function with the mock http.ResponseWriter and http.Request
+	result := tc.NewTupaContext(w, r)
+
+	// Check if the request and response in the result are the same as the ones we passed in
+	if result.request != r {
+		t.Errorf("esperava request %v, mas recebeu %v", r, result.request)
+	}
+
+	if result.response != w {
+		t.Errorf("esperava response %v, mas recebeu %v", w, result.response)
+	}
+}
