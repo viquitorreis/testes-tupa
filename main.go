@@ -2,14 +2,19 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
+	"math/big"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"syscall"
@@ -101,7 +106,25 @@ func (a *APIServer) New() {
 		})
 	}
 
-	routerHandler := cors.Default().Handler(a.router)
+	// c := cors.New(cors.Options{
+	// 	// AllowedOrigins:   []string{"http://localhost:4200", "http://localhost:6969"},
+	// 	// AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodOptions, http.MethodPut, http.MethodPatch, http.MethodHead, http.MethodConnect, http.MethodTrace},
+	// 	// AllowedHeaders:   []string{"*"},
+	// 	AllowCredentials: true,
+	// })
+
+	c := cors.New(cors.Options{
+		AllowCredentials: true,
+	})
+
+	// routerHandler := cors.Default().Handler(a.router)
+
+	// testingHandler := &cors.Cors{
+
+	// }
+	routerHandler := c.Handler(a.router)
+
+	// a.router.Use(accessControlMiddleware)
 
 	a.server = &http.Server{
 		Addr:    a.listenAddr,
@@ -133,6 +156,7 @@ func (a *APIServer) New() {
 
 func NewAPIServer(listenAddr string) *APIServer {
 	router := mux.NewRouter()
+	// router.Use(accessControlMiddleware)
 
 	return &APIServer{
 		listenAddr:        listenAddr,
@@ -140,6 +164,40 @@ func NewAPIServer(listenAddr string) *APIServer {
 		globalMiddlewares: MiddlewareChain{},
 	}
 }
+
+// func accessControlMiddleware(next http.Handler) http.Handler {
+// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 		// w.Header().Set("Access-Control-Allow-Origin", "http://localhost:4200/")
+// 		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:4200")
+// 		// w.Header().Add("Access-Control-Allow-Methods", "http://localhost:4200")
+// 		// w.Header().Add("Access-Control-Allow-Methods", "localhost:4200/")
+// 		// w.Header().Add("Access-Control-Allow-Methods", "localhost:4200")
+// 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Requested-With")
+// 		w.Header().Set("Access-Control-Allow-Credentials", "true")
+
+// 		log.Println("Middleware accessControlMiddleware")
+
+// 		if r.Method == "OPTIONS" {
+// 			log.Println("OPTIONS call")
+// 			w.WriteHeader(http.StatusOK)
+// 			return
+// 		}
+
+// 		log.Println("Access-Control-Allow-Origin:", w.Header().Get("Access-Control-Allow-Origin"))
+// 		log.Println("Access-Control-Allow-Methods:", w.Header().Get("Access-Control-Allow-Methods"))
+// 		log.Println("Access-Control-Allow-Headers:", w.Header().Get("Access-Control-Allow-Headers"))
+// 		log.Println("Access-Control-Allow-Credentials:", w.Header().Get("Access-Control-Allow-Credentials"))
+
+// 		next.ServeHTTP(w, r)
+// 	})
+// }
+
+// func MiddlewareContrBTupa(next tupa.APIFunc) tupa.APIFunc {
+// 	return func(tc *tupa.TupaContext) error {
+// 		fmt.Println("Middleware MiddlewareContrB")
+// 		return next(tc)
+// 	}
+// }
 
 func WelcomeHandler(tc *TupaContext) error {
 	WriteJSONHelper(tc.response, http.StatusOK, "Seja bem vindo ao Tupã framework!")
@@ -194,11 +252,30 @@ func (a *APIServer) MakeHTTPHandlerFuncHelper(routeInfo RouteInfo, middlewares M
 			return
 		}
 
+		log.Println(r.Method, r.URL.Path)
+
 		if r.Method == string(routeInfo.Method) {
 			if err := routeInfo.Handler(ctx); err != nil {
 				if err := WriteJSONHelper(w, http.StatusInternalServerError, APIError{Error: err.Error()}); err != nil {
 					fmt.Println("Erro ao escrever resposta JSON:", err)
 				}
+			}
+
+			// w.Header().Set("Access-Control-Allow-Origin", "*")
+			// w.Header().Set("Access-Control-Allow-Methods", "*")
+			// w.Header().Set("Access-Control-Allow-Headers", "*")
+
+			log.Println("Middleware accessControlMiddleware MakeHTTPHandlerFuncHelper")
+
+			log.Println("Access-Control-Allow-Origin:", w.Header().Get("Access-Control-Allow-Origin"))
+			log.Println("Access-Control-Allow-Methods:", w.Header().Get("Access-Control-Allow-Methods"))
+			log.Println("Access-Control-Allow-Headers:", w.Header().Get("Access-Control-Allow-Headers"))
+			log.Println("Access-Control-Allow-Headers:", w.Header().Get("Access-Control-Allow-Credentials"))
+
+			if r.Method == "OPTIONS" {
+				log.Println("OPTIONS call 2")
+				w.WriteHeader(http.StatusOK)
+				return
 			}
 		} else {
 			WriteJSONHelper(w, http.StatusMethodNotAllowed, APIError{Error: "Método HTTP não permitido"})
@@ -435,63 +512,92 @@ func MiddlewareGLOBAL(next APIFunc) APIFunc {
 
 // user
 func main() {
-	// server := tupa.NewAPIServer(":6969")
-	// server.UseGlobalMiddleware(MiddlewareAPIEndpoint, MiddlewareGLOBAL)
-
-	// srv := tupa.NewAPIServer(":6969")
-	// srv.UseGlobalMiddleware(MiddlewareGLOBALTupa)
-
-	// routeInfo := []RouteInfo{
-	// 	{
-	// 		Path:        "/c2",
-	// 		Method:      "GET",
-	// 		Handler:     HandleEndpointQueryParams,
-	// 		Middlewares: []MiddlewareFunc{MiddlewareGLOBAL},
-	// 	},
-	// 	{
-	// 		Path:        "/c3",
-	// 		Method:      "GET",
-	// 		Handler:     HandleEndpointQueryParams,
-	// 		Middlewares: []MiddlewareFunc{MiddlewareGLOBAL},
-	// 	},
-	// }
-
-	// server.RegisterRoutes(routeInfo)
-
-	// server.RegisterRoutes([]RouteInfo{
-	// 	{
-	// 		Path:        "/c3",
-	// 		Method:      MethodGet,
-	// 		Handler:     handleSendString,
-	// 		Middlewares: []MiddlewareFunc{HelloWorldMiddleware},
-	// 	},
-	// 	{
-	// 		Path:        "/c3",
-	// 		Method:      MethodPost,
-	// 		Handler:     HandlePOSTEndpoint,
-	// 		Middlewares: []MiddlewareFunc{MiddlewarePost},
-	// 	},
-	// })
-
-	// server.RegisterRoutes(Routes)
-
-	// server.New()
-	// ExampleRouteManagerTupa()
-	// server.RegisterRoutes(tupa.GetRoutes())
-	// server.New()
-
 	server := NewAPIServer(":6969")
-	server.RegisterRoutes([]RouteInfo{
-		{
-			Path:   "/upload",
-			Method: "POST",
-			Handler: func(tc *TupaContext) error {
-				return tc.SendString("Hello world")
-			},
-		},
-	})
+
+	ExampleRouteManagerTupa()
+	// AddRoutes(nil, ContrTestAuthCors)
+	server.RegisterRoutes(GetRoutes())
 
 	server.New()
+}
+
+var templates = template.Must(template.ParseFiles("pages/upload.html"))
+
+func GetFileHandler(tc *TupaContext) error {
+	const page = "upload"
+	displayTemplate(tc, page, nil)
+
+	return nil
+}
+
+func UploadFileHandler(tc *TupaContext) error {
+	filHeader, err := UploadFile(tc, "image", "static/images/", "arquivo_qualquer")
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(filHeader.Filename)
+	return nil
+}
+
+func displayTemplate(tc *TupaContext, page string, data interface{}) {
+	templates.ExecuteTemplate(*tc.Response(), page+".html", data)
+}
+
+func UploadFile(tc *TupaContext, filePrefix, destFolder, formFileKey string) (multipart.FileHeader, error) {
+	tc.Request().ParseMultipartForm(10 << 20)
+
+	file, fileHeader, err := tc.Request().FormFile(formFileKey)
+	if err != nil {
+		fmt.Println("Erro ao retornar o arquivo")
+		fmt.Println(err)
+		return multipart.FileHeader{}, err
+	}
+
+	randStr, err := GenerateRandomString(6)
+	if err != nil {
+		return multipart.FileHeader{}, err
+	}
+	fileHeader.Filename = filePrefix + "_" + randStr + fileHeader.Filename
+
+	defer file.Close()
+	// fmt.Printf("Uploaded File: %+v\n", fileHeader.Filename)
+	// fmt.Printf("File Size: %+v\n", fileHeader.Size)
+	// fmt.Printf("MIME Header: %+v\n", fileHeader.Header)
+
+	destPath := filepath.Join(destFolder, fileHeader.Filename)
+	destFile, err := os.Create(destPath)
+	if err != nil {
+		return multipart.FileHeader{}, err
+	}
+
+	defer destFile.Close()
+	if err != nil {
+		return multipart.FileHeader{}, WriteJSONHelper(*tc.Response(), http.StatusInternalServerError, err.Error())
+	}
+
+	// copia o arquivo do upload para o arquivo criado no SO
+	if _, err := io.Copy(destFile, file); err != nil {
+		return multipart.FileHeader{}, WriteJSONHelper(*tc.Response(), http.StatusInternalServerError, err.Error())
+	}
+
+	fmt.Fprint(*tc.Response(), "Arquivo salvo com sucesso\n")
+	return *fileHeader, nil
+}
+
+func GenerateRandomString(length int) (string, error) {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	charsetLen := big.NewInt(int64(len(charset)))
+
+	randomString := make([]byte, length)
+	for i := range randomString {
+		randomIndex, err := rand.Int(rand.Reader, charsetLen)
+		if err != nil {
+			return "", err
+		}
+		randomString[i] = charset[randomIndex.Int64()]
+	}
+	return string(randomString), nil
 }
 
 // ////////// testes pkt tupa
@@ -530,87 +636,12 @@ func MiddlewareContrCTupa(next tupa.APIFunc) tupa.APIFunc {
 }
 
 func ExampleRouteManagerTupa() {
-	tupa.AddRoutes(tupa.MiddlewareChain{MiddlewareContrATupa, MiddlewareContrBTupa}, ContrARoutesTupa)
+	// tupa.AddRoutes(tupa.MiddlewareChain{MiddlewareContrATupa, MiddlewareContrBTupa}, ContrARoutesTupa)
 
-	tupa.AddRoutes(tupa.MiddlewareChain{MiddlewareContrBTupa}, ContrBRoutesTupa)
+	// tupa.AddRoutes(tupa.MiddlewareChain{MiddlewareContrBTupa}, ContrBRoutesTupa)
 
-	tupa.AddRoutes(tupa.MiddlewareChain{MiddlewareContrCTupa}, ContrCRoutesTupa)
-}
-
-func ContrARoutesTupa() []tupa.RouteInfo {
-	return []tupa.RouteInfo{
-		{
-			Path:        "/auth/google/login",
-			Method:      "GET",
-			Handler:     handleGoogleAuth,
-			Middlewares: nil,
-		},
-		{
-			Path:    "/auth/google/callback",
-			Method:  "GET",
-			Handler: handleCallBackGoogle,
-		},
-		{
-			Path:    "/callback-gl",
-			Method:  "GET",
-			Handler: HandleLogin,
-		},
-		{
-			Path:   "/auth/google",
-			Method: "GET",
-			Handler: func(tc *tupa.TupaContext) error {
-				ConfigGoogle(tc)
-				return nil
-			},
-		},
-	}
-}
-
-func handleGoogleAuth(tc *tupa.TupaContext) error {
-	// url := googleOauthConfig.AuthCodeURL("state")
-
-	// http.Redirect(*tc.Response(), tc.Request(), "http://localhost:6969/auth/google/login", http.StatusTemporaryRedirect)
-	googleAuth()
-	return nil
-}
-
-func handleGoogleCallback(tc *tupa.TupaContext) error {
-	fmt.Println("handleGoogleCallback")
-	code := tc.Request().FormValue("code")
-	tok, err := googleOauthConfig.Exchange(context.Background(), code)
-	if err != nil {
-		http.Error(*tc.Response(), "Failed to exchange token: "+err.Error(), http.StatusBadRequest)
-		return nil
-	}
-
-	client := googleOauthConfig.Client(context.Background(), tok)
-	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
-	if err != nil {
-		http.Error(*tc.Response(), "Failed to retrieve user info: "+err.Error(), http.StatusInternalServerError)
-		return nil
-	}
-	fmt.Println(resp)
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		http.Error(*tc.Response(), "Failed to read response body: "+err.Error(), http.StatusInternalServerError)
-		return nil
-	}
-
-	var userInfo map[string]interface{}
-	if err := json.Unmarshal(body, &userInfo); err != nil {
-		http.Error(*tc.Response(), "Failed to unmarshal response body: "+err.Error(), http.StatusInternalServerError)
-		return nil
-	}
-
-	name, _ := userInfo["name"].(string)
-	email, _ := userInfo["email"].(string)
-
-	fmt.Printf("Name: %s\n", name)
-	fmt.Printf("Email: %s\n", email)
-
-	return nil
+	// tupa.AddRoutes(tupa.MiddlewareChain{MiddlewareContrCTupa}, ContrCRoutesTupa)
+	AddRoutes(nil, ContrTestAuthCors)
 }
 
 func handleSendStringTupa(tc *tupa.TupaContext) error {
@@ -643,27 +674,169 @@ func handleMain(tc *tupa.TupaContext) error {
 	return tc.SendString("Hello world oauth")
 }
 
-func ContrBRoutesTupa() []tupa.RouteInfo {
-	return []tupa.RouteInfo{
+func ContrTestAuthCors() []RouteInfo {
+	return []RouteInfo{
 		{
-			Path:    "/contrB",
-			Method:  "POST",
-			Handler: handleSendStringTupa,
+			Path:    "/api/v1/auth/google",
+			Method:  "GET",
+			Handler: AuthGoogleLogin,
+			// Middlewares: []tupa.MiddlewareFunc{middlewares.MiddlewareAllowOptions},
 		},
 		{
-			Path:    "/contrB?name={name}",
+			Path:    "/api/v1/auth/google/callback",
 			Method:  "GET",
-			Handler: HandleGetParam,
+			Handler: AuthGoogleCallbackFunc,
+		},
+		{
+			Path:   "/helloworld",
+			Method: "GET",
+			Handler: func(tc *TupaContext) error {
+				return tc.SendString("Hello world")
+			},
+		},
+		{
+			Path:   "/api/v1/account",
+			Method: "POST",
+			Handler: func(tc *TupaContext) error {
+				log.Println("hello world")
+				fmt.Println("hello world")
+				return nil
+			},
 		},
 	}
 }
 
-func ContrCRoutesTupa() []tupa.RouteInfo {
-	return []tupa.RouteInfo{
-		{
-			Path:    "/contrC",
-			Method:  "POST",
-			Handler: handleSendStringTupa,
-		},
+func AuthGoogleLogin(tc *TupaContext) error {
+	// (*tc.Response()).Header().Set("Access-Control-Allow-Origin", "*")
+	// (*tc.Response()).Header().Set("Access-Control-Allow-Methods", "*")
+	// (*tc.Response()).Header().Set("Access-Control-Allow-Headers", "*")
+
+	// if tc.Request().Method == "OPTIONS" {
+	// 	(*tc.Response()).WriteHeader(http.StatusOK)
+	// 	return nil
+	// }
+
+	log.Println("Access-Control-Allow-Origin:", (*tc.Response()).Header().Get("Access-Control-Allow-Origin"))
+	log.Println("Access-Control-Allow-Methods:", (*tc.Response()).Header().Get("Access-Control-Allow-Methods"))
+	log.Println("Access-Control-Allow-Headers:", (*tc.Response()).Header().Get("Access-Control-Allow-Headers"))
+	log.Println("Access-Control-Allow-Credentials:", (*tc.Response()).Header().Get("Access-Control-Allow-Credentials"))
+
+	clientID := "328882923422-gg4m2s4druhop7fif2tro6dv7k97onk5.apps.googleusercontent.com"
+	clientSecret := "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"
+
+	apiGoogleCallbackUrl := fmt.Sprintf("%s/%s/auth/google/callback", "http://localhost:6969", "api/v1")
+	UseGoogleOauth(clientID, clientSecret, apiGoogleCallbackUrl, "http://localhost:6969", []string{"https://www.googleapis.com/auth/userinfo.email"})
+
+	if err := AuthGoogleHandler(tc); err != nil {
+		return err
 	}
+
+	log.Println("Access-Control-Allow-Origin:", (*tc.Response()).Header().Get("Access-Control-Allow-Origin"))
+	log.Println("Access-Control-Allow-Methods:", (*tc.Response()).Header().Get("Access-Control-Allow-Methods"))
+	log.Println("Access-Control-Allow-Headers:", (*tc.Response()).Header().Get("Access-Control-Allow-Headers"))
+	log.Println("Access-Control-Allow-Headers:", (*tc.Response()).Header().Get("Access-Control-Allow-Credentials"))
+
+	return nil
+}
+
+func AuthGoogleCallbackFunc(tc *TupaContext) error {
+	// (*tc.Response()).Header().Set("Access-Control-Allow-Origin", "*")
+	// (*tc.Response()).Header().Set("Access-Control-Allow-Methods", "*")
+	// (*tc.Response()).Header().Set("Access-Control-Allow-Headers", "*")
+
+	if tc.Request().Method == "OPTIONS" {
+		(*tc.Response()).WriteHeader(http.StatusOK)
+		return nil
+	}
+
+	log.Println("Access-Control-Allow-Origin:", (*tc.Response()).Header().Get("Access-Control-Allow-Origin"))
+	log.Println("Access-Control-Allow-Methods:", (*tc.Response()).Header().Get("Access-Control-Allow-Methods"))
+	log.Println("Access-Control-Allow-Headers:", (*tc.Response()).Header().Get("Access-Control-Allow-Headers"))
+	log.Println("Access-Control-Allow-Headers:", (*tc.Response()).Header().Get("Access-Control-Allow-Credentials"))
+
+	log.Println("ok")
+	// resp, err := tupa.AuthGoogleCallback(*tc.Response(), tc.Request())
+	// if err != nil {
+	// 	return err
+	// }
+
+	// data, err := data.NewAccDataPgStore()
+	// if err != nil {
+	// 	return err
+	// }
+
+	// var tokenStr string
+	var response map[string]string
+
+	// acc, err := data.GetAccountByEmail(resp.UserInfo.Email)
+	// if acc == nil && err != nil {
+	// 	if strings.HasPrefix(err.Error(), "sql: expected") {
+	// 		return fmt.Errorf("falta de parâmetros no db")
+	// 	}
+
+	// 	locTime, err := helpers.GetBrazilCurrentTimeHelper()
+	// 	if err != nil {
+	// 		return err
+	// 	}
+
+	// 	timeNow, err := helpers.FormatStringTimeToTime(locTime)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+
+	// 	account, err := types.NewGoogleAccount(
+	// 		resp.UserInfo.Email,
+	// 		timeNow,
+	// 	)
+	// 	if err != nil {
+	// 		return err
+	// 	}
+
+	// 	newAcc, err := data.CreateAccountAndReturn(&types.Account{
+	// 		Email:     account.Email,
+	// 		CreatedAt: account.CreatedAt,
+	// 		UpdatedAt: account.UpdatedAt,
+	// 	})
+	// 	if err != nil {
+	// 		return err
+	// 	}
+
+	// 	tokenStr, err = helpers.CreateJWTHelper(newAcc.UUID, "login")
+	// 	if err != nil {
+	// 		return err
+	// 	}
+
+	// 	response = map[string]string{
+	// 		"Email": newAcc.Email,
+	// 		"Token": tokenStr,
+	// 	}
+	// }
+
+	// if acc != nil {
+	// 	tokenStr, err = helpers.CreateJWTHelper(acc.UUID, "login")
+	// 	if err != nil {
+	// 		return err
+	// 	}
+
+	// 	response = map[string]string{
+	// 		"Email": acc.Email,
+	// 		"Token": tokenStr,
+	// 	}
+	// }
+
+	// fmt.Println("domain", resp.UserInfo.HostedDomain)
+	// fmt.Println("Access token:", resp.Token.AccessToken)
+	// fmt.Println("Token:", resp.Token)
+	// fmt.Println("Token expiry:", resp.Token.Expiry)
+	// fmt.Println("Token type:", resp.Token.TokenType)
+	// fmt.Println("User:", resp.UserInfo)
+	// fmt.Println("User E-mail:", resp.UserInfo.Email)
+	// envPath := helpers.GetEnvPathHelper("../.env")
+	// if err := godotenv.Load(envPath); err != nil {
+	// 	return err
+	// }
+	frontUrl := os.Getenv("http://localhost:4200")
+
+	http.Redirect(*tc.Response(), tc.Request(), fmt.Sprintf("%s/dashboard?token=%s", frontUrl, response), http.StatusFound)
+	return nil
 }

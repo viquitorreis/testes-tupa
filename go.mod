@@ -3,7 +3,7 @@ module github.com/viquitorreis/testes-tupa.git
 go 1.21.0
 
 require (
-	github.com/Iuptec/tupa v0.0.20
+	github.com/Iuptec/tupa v0.0.27
 	github.com/gorilla/mux v1.8.1
 	github.com/rs/cors v1.10.1
 	golang.org/x/oauth2 v0.17.0
