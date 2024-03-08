@@ -261,39 +261,11 @@ func (a *APIServer) MakeHTTPHandlerFuncHelper(routeInfo RouteInfo, middlewares M
 				}
 			}
 
-			// w.Header().Set("Access-Control-Allow-Origin", "*")
-			// w.Header().Set("Access-Control-Allow-Methods", "*")
-			// w.Header().Set("Access-Control-Allow-Headers", "*")
-
-			log.Println("Middleware accessControlMiddleware MakeHTTPHandlerFuncHelper")
-
-			log.Println("Access-Control-Allow-Origin:", w.Header().Get("Access-Control-Allow-Origin"))
-			log.Println("Access-Control-Allow-Methods:", w.Header().Get("Access-Control-Allow-Methods"))
-			log.Println("Access-Control-Allow-Headers:", w.Header().Get("Access-Control-Allow-Headers"))
-			log.Println("Access-Control-Allow-Headers:", w.Header().Get("Access-Control-Allow-Credentials"))
-
-			if r.Method == "OPTIONS" {
-				log.Println("OPTIONS call 2")
-				w.WriteHeader(http.StatusOK)
-				return
-			}
 		} else {
 			WriteJSONHelper(w, http.StatusMethodNotAllowed, APIError{Error: "Método HTTP não permitido"})
 		}
 	}
 }
-
-// func NewController() *APIServer {
-// 	return &APIServer{router: getGlobalRouter()} // cria sub rota para a rota
-// 	// return &DefaultController{router: getGlobalRouter().PathPrefix(baseRoute).Subrouter()} // cria sub rota para a rota
-// }
-
-// func getGlobalRouter() *mux.Router {
-// 	globalRouterOnce.Do(func() {
-// 		globalRouter = mux.NewRouter()
-// 	})
-// 	return globalRouter
-// }
 
 func (tc *TupaContext) Request() *http.Request {
 	return tc.request
@@ -512,7 +484,7 @@ func MiddlewareGLOBAL(next APIFunc) APIFunc {
 
 // user
 func main() {
-	server := NewAPIServer(":6969")
+	server := NewAPIServer(":6968")
 
 	ExampleRouteManagerTupa()
 	// AddRoutes(nil, ContrTestAuthCors)
@@ -520,8 +492,6 @@ func main() {
 
 	server.New()
 }
-
-var templates = template.Must(template.ParseFiles("pages/upload.html"))
 
 func GetFileHandler(tc *TupaContext) error {
 	const page = "upload"
@@ -541,6 +511,7 @@ func UploadFileHandler(tc *TupaContext) error {
 }
 
 func displayTemplate(tc *TupaContext, page string, data interface{}) {
+	var templates = template.Must(template.ParseFiles("pages/upload.html"))
 	templates.ExecuteTemplate(*tc.Response(), page+".html", data)
 }
 
@@ -572,9 +543,6 @@ func UploadFile(tc *TupaContext, filePrefix, destFolder, formFileKey string) (mu
 	}
 
 	defer destFile.Close()
-	if err != nil {
-		return multipart.FileHeader{}, WriteJSONHelper(*tc.Response(), http.StatusInternalServerError, err.Error())
-	}
 
 	// copia o arquivo do upload para o arquivo criado no SO
 	if _, err := io.Copy(destFile, file); err != nil {
@@ -641,7 +609,7 @@ func ExampleRouteManagerTupa() {
 	// tupa.AddRoutes(tupa.MiddlewareChain{MiddlewareContrBTupa}, ContrBRoutesTupa)
 
 	// tupa.AddRoutes(tupa.MiddlewareChain{MiddlewareContrCTupa}, ContrCRoutesTupa)
-	AddRoutes(nil, ContrTestAuthCors)
+	AddRoutes(nil, ContrUploadImage)
 }
 
 func handleSendStringTupa(tc *tupa.TupaContext) error {
@@ -674,52 +642,22 @@ func handleMain(tc *tupa.TupaContext) error {
 	return tc.SendString("Hello world oauth")
 }
 
-func ContrTestAuthCors() []RouteInfo {
+func ContrUploadImage() []RouteInfo {
 	return []RouteInfo{
 		{
-			Path:    "/api/v1/auth/google",
+			Path:    "/form",
 			Method:  "GET",
-			Handler: AuthGoogleLogin,
-			// Middlewares: []tupa.MiddlewareFunc{middlewares.MiddlewareAllowOptions},
+			Handler: GetFileHandler,
 		},
 		{
-			Path:    "/api/v1/auth/google/callback",
-			Method:  "GET",
-			Handler: AuthGoogleCallbackFunc,
-		},
-		{
-			Path:   "/helloworld",
-			Method: "GET",
-			Handler: func(tc *TupaContext) error {
-				return tc.SendString("Hello world")
-			},
-		},
-		{
-			Path:   "/api/v1/account",
-			Method: "POST",
-			Handler: func(tc *TupaContext) error {
-				log.Println("hello world")
-				fmt.Println("hello world")
-				return nil
-			},
+			Path:    "/upload",
+			Method:  "POST",
+			Handler: UploadFileHandler,
 		},
 	}
 }
 
 func AuthGoogleLogin(tc *TupaContext) error {
-	// (*tc.Response()).Header().Set("Access-Control-Allow-Origin", "*")
-	// (*tc.Response()).Header().Set("Access-Control-Allow-Methods", "*")
-	// (*tc.Response()).Header().Set("Access-Control-Allow-Headers", "*")
-
-	// if tc.Request().Method == "OPTIONS" {
-	// 	(*tc.Response()).WriteHeader(http.StatusOK)
-	// 	return nil
-	// }
-
-	log.Println("Access-Control-Allow-Origin:", (*tc.Response()).Header().Get("Access-Control-Allow-Origin"))
-	log.Println("Access-Control-Allow-Methods:", (*tc.Response()).Header().Get("Access-Control-Allow-Methods"))
-	log.Println("Access-Control-Allow-Headers:", (*tc.Response()).Header().Get("Access-Control-Allow-Headers"))
-	log.Println("Access-Control-Allow-Credentials:", (*tc.Response()).Header().Get("Access-Control-Allow-Credentials"))
 
 	clientID := "328882923422-gg4m2s4druhop7fif2tro6dv7k97onk5.apps.googleusercontent.com"
 	clientSecret := "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"
@@ -731,110 +669,17 @@ func AuthGoogleLogin(tc *TupaContext) error {
 		return err
 	}
 
-	log.Println("Access-Control-Allow-Origin:", (*tc.Response()).Header().Get("Access-Control-Allow-Origin"))
-	log.Println("Access-Control-Allow-Methods:", (*tc.Response()).Header().Get("Access-Control-Allow-Methods"))
-	log.Println("Access-Control-Allow-Headers:", (*tc.Response()).Header().Get("Access-Control-Allow-Headers"))
-	log.Println("Access-Control-Allow-Headers:", (*tc.Response()).Header().Get("Access-Control-Allow-Credentials"))
-
 	return nil
 }
 
 func AuthGoogleCallbackFunc(tc *TupaContext) error {
-	// (*tc.Response()).Header().Set("Access-Control-Allow-Origin", "*")
-	// (*tc.Response()).Header().Set("Access-Control-Allow-Methods", "*")
-	// (*tc.Response()).Header().Set("Access-Control-Allow-Headers", "*")
 
 	if tc.Request().Method == "OPTIONS" {
 		(*tc.Response()).WriteHeader(http.StatusOK)
 		return nil
 	}
 
-	log.Println("Access-Control-Allow-Origin:", (*tc.Response()).Header().Get("Access-Control-Allow-Origin"))
-	log.Println("Access-Control-Allow-Methods:", (*tc.Response()).Header().Get("Access-Control-Allow-Methods"))
-	log.Println("Access-Control-Allow-Headers:", (*tc.Response()).Header().Get("Access-Control-Allow-Headers"))
-	log.Println("Access-Control-Allow-Headers:", (*tc.Response()).Header().Get("Access-Control-Allow-Credentials"))
-
-	log.Println("ok")
-	// resp, err := tupa.AuthGoogleCallback(*tc.Response(), tc.Request())
-	// if err != nil {
-	// 	return err
-	// }
-
-	// data, err := data.NewAccDataPgStore()
-	// if err != nil {
-	// 	return err
-	// }
-
-	// var tokenStr string
 	var response map[string]string
-
-	// acc, err := data.GetAccountByEmail(resp.UserInfo.Email)
-	// if acc == nil && err != nil {
-	// 	if strings.HasPrefix(err.Error(), "sql: expected") {
-	// 		return fmt.Errorf("falta de parâmetros no db")
-	// 	}
-
-	// 	locTime, err := helpers.GetBrazilCurrentTimeHelper()
-	// 	if err != nil {
-	// 		return err
-	// 	}
-
-	// 	timeNow, err := helpers.FormatStringTimeToTime(locTime)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-
-	// 	account, err := types.NewGoogleAccount(
-	// 		resp.UserInfo.Email,
-	// 		timeNow,
-	// 	)
-	// 	if err != nil {
-	// 		return err
-	// 	}
-
-	// 	newAcc, err := data.CreateAccountAndReturn(&types.Account{
-	// 		Email:     account.Email,
-	// 		CreatedAt: account.CreatedAt,
-	// 		UpdatedAt: account.UpdatedAt,
-	// 	})
-	// 	if err != nil {
-	// 		return err
-	// 	}
-
-	// 	tokenStr, err = helpers.CreateJWTHelper(newAcc.UUID, "login")
-	// 	if err != nil {
-	// 		return err
-	// 	}
-
-	// 	response = map[string]string{
-	// 		"Email": newAcc.Email,
-	// 		"Token": tokenStr,
-	// 	}
-	// }
-
-	// if acc != nil {
-	// 	tokenStr, err = helpers.CreateJWTHelper(acc.UUID, "login")
-	// 	if err != nil {
-	// 		return err
-	// 	}
-
-	// 	response = map[string]string{
-	// 		"Email": acc.Email,
-	// 		"Token": tokenStr,
-	// 	}
-	// }
-
-	// fmt.Println("domain", resp.UserInfo.HostedDomain)
-	// fmt.Println("Access token:", resp.Token.AccessToken)
-	// fmt.Println("Token:", resp.Token)
-	// fmt.Println("Token expiry:", resp.Token.Expiry)
-	// fmt.Println("Token type:", resp.Token.TokenType)
-	// fmt.Println("User:", resp.UserInfo)
-	// fmt.Println("User E-mail:", resp.UserInfo.Email)
-	// envPath := helpers.GetEnvPathHelper("../.env")
-	// if err := godotenv.Load(envPath); err != nil {
-	// 	return err
-	// }
 	frontUrl := os.Getenv("http://localhost:4200")
 
 	http.Redirect(*tc.Response(), tc.Request(), fmt.Sprintf("%s/dashboard?token=%s", frontUrl, response), http.StatusFound)
