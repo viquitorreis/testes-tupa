@@ -12,6 +12,7 @@ import (
 	"math/big"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -22,7 +23,6 @@ import (
 
 	// pages "https://github.com/viquitorreis/testes-tupa/pages"
 
-	"github.com/Iuptec/tupa"
 	"github.com/gorilla/mux"
 	"github.com/rs/cors"
 )
@@ -356,11 +356,11 @@ func HandleEndpointQueryParam(tc *TupaContext) error {
 	return nil
 }
 
-func HandleGetParam(tc *tupa.TupaContext) error {
-	param := tc.QueryParams()
-	tc.SendString("Hello " + param["name"][0])
-	return nil
-}
+// func HandleGetParam(tc *tupa.TupaContext) error {
+// 	param := tc.QueryParams()
+// 	tc.SendString("Hello " + param["name"][0])
+// 	return nil
+// }
 
 func HandleEndpointQueryParams(tc *TupaContext) error {
 	param := tc.QueryParams()
@@ -492,7 +492,7 @@ func MiddlewareGLOBAL(next APIFunc) APIFunc {
 
 // user
 func main() {
-	server := NewAPIServer(":6968")
+	server := NewAPIServer(":6969")
 
 	ExampleRouteManagerTupa()
 	// AddRoutes(nil, ContrTestAuthCors)
@@ -577,39 +577,39 @@ func GenerateRandomString(length int) (string, error) {
 }
 
 // ////////// testes pkt tupa
-func MiddlewareGLOBALTupa(next tupa.APIFunc) tupa.APIFunc {
-	return func(tc *tupa.TupaContext) error {
-		fmt.Println("MiddlewareGLOBAL")
-		return next(tc)
-	}
-}
+// func MiddlewareGLOBALTupa(next tupa.APIFunc) tupa.APIFunc {
+// 	return func(tc *tupa.TupaContext) error {
+// 		fmt.Println("MiddlewareGLOBAL")
+// 		return next(tc)
+// 	}
+// }
 
-func HandleAPIEndpointTupa(tc *tupa.TupaContext) error {
-	fmt.Println("Endpoint da API")
-	tupa.WriteJSONHelper(*tc.Response(), http.StatusOK, "Endpoint da API")
-	return nil
-}
+// func HandleAPIEndpointTupa(tc *tupa.TupaContext) error {
+// 	fmt.Println("Endpoint da API")
+// 	tupa.WriteJSONHelper(*tc.Response(), http.StatusOK, "Endpoint da API")
+// 	return nil
+// }
 
-func MiddlewareContrATupa(next tupa.APIFunc) tupa.APIFunc {
-	return func(tc *tupa.TupaContext) error {
-		fmt.Println("Middleware MiddlewareContrA")
-		return next(tc)
-	}
-}
+// func MiddlewareContrATupa(next tupa.APIFunc) tupa.APIFunc {
+// 	return func(tc *tupa.TupaContext) error {
+// 		fmt.Println("Middleware MiddlewareContrA")
+// 		return next(tc)
+// 	}
+// }
 
-func MiddlewareContrBTupa(next tupa.APIFunc) tupa.APIFunc {
-	return func(tc *tupa.TupaContext) error {
-		fmt.Println("Middleware MiddlewareContrB")
-		return next(tc)
-	}
-}
+// func MiddlewareContrBTupa(next tupa.APIFunc) tupa.APIFunc {
+// 	return func(tc *tupa.TupaContext) error {
+// 		fmt.Println("Middleware MiddlewareContrB")
+// 		return next(tc)
+// 	}
+// }
 
-func MiddlewareContrCTupa(next tupa.APIFunc) tupa.APIFunc {
-	return func(tc *tupa.TupaContext) error {
-		fmt.Println("Middleware MiddlewareContrC")
-		return next(tc)
-	}
-}
+// func MiddlewareContrCTupa(next tupa.APIFunc) tupa.APIFunc {
+// 	return func(tc *tupa.TupaContext) error {
+// 		fmt.Println("Middleware MiddlewareContrC")
+// 		return next(tc)
+// 	}
+// }
 
 func ExampleRouteManagerTupa() {
 	// tupa.AddRoutes(tupa.MiddlewareChain{MiddlewareContrATupa, MiddlewareContrBTupa}, ContrARoutesTupa)
@@ -620,10 +620,10 @@ func ExampleRouteManagerTupa() {
 	AddRoutes(nil, ContrUploadImage)
 }
 
-func handleSendStringTupa(tc *tupa.TupaContext) error {
-	fmt.Println("handleSendStringTupa")
-	return tc.SendString("Hello world oauth")
-}
+// func handleSendStringTupa(tc *tupa.TupaContext) error {
+// 	fmt.Println("handleSendStringTupa")
+// 	return tc.SendString("Hello world oauth")
+// }
 
 const IndexPage = `
 <html>
@@ -642,13 +642,13 @@ const IndexPage = `
 </html>
 `
 
-func handleMain(tc *tupa.TupaContext) error {
-	(*tc.Response()).Header().Set("Content-Type", "text/html; charset=utf-8")
-	(*tc.Response()).WriteHeader(http.StatusOK)
-	(*tc.Response()).Write([]byte(IndexPage))
+// func handleMain(tc *tupa.TupaContext) error {
+// 	(*tc.Response()).Header().Set("Content-Type", "text/html; charset=utf-8")
+// 	(*tc.Response()).WriteHeader(http.StatusOK)
+// 	(*tc.Response()).Write([]byte(IndexPage))
 
-	return tc.SendString("Hello world oauth")
-}
+// 	return tc.SendString("Hello world oauth")
+// }
 
 func ContrUploadImage() []RouteInfo {
 	return []RouteInfo{
@@ -661,6 +661,16 @@ func ContrUploadImage() []RouteInfo {
 			Path:    "/upload",
 			Method:  "POST",
 			Handler: UploadFileHandler,
+		},
+		{
+			Path:    "/api/v1/auth/google",
+			Method:  "GET",
+			Handler: AuthGoogleLogin,
+		},
+		{
+			Path:    "/api/v1/auth/google/callback",
+			Method:  "GET",
+			Handler: AuthGoogleCallbackFunc,
 		},
 	}
 }
@@ -681,15 +691,68 @@ func AuthGoogleLogin(tc *TupaContext) error {
 }
 
 func AuthGoogleCallbackFunc(tc *TupaContext) error {
+	code := tc.Request().FormValue("code")
+	log.Println("code:", code)
 
-	if tc.Request().Method == "OPTIONS" {
-		(*tc.Response()).WriteHeader(http.StatusOK)
+	if code == "" {
+		log.Println("Usuário não aceitou a autenticação...")
+		reason := tc.Request().FormValue("error")
+		if reason == "user_denied" {
+			log.Println("Usuário negou a permissão...")
+		}
+
+		http.Redirect(*tc.Response(), tc.Request(), GoogleWentWrongRedirUrl, http.StatusTemporaryRedirect)
 		return nil
 	}
 
-	var response map[string]string
-	frontUrl := os.Getenv("http://localhost:4200")
+	// (*tc.Response()).Header().Set("Access-Control-Allow-Origin", "*")
+	// (*tc.Response()).Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+	// (*tc.Response()).Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
-	http.Redirect(*tc.Response(), tc.Request(), fmt.Sprintf("%s/dashboard?token=%s", frontUrl, response), http.StatusFound)
+	// if tc.Request().Method == "OPTIONS" {
+	// 	(*tc.Response()).WriteHeader(http.StatusOK)
+	// 	return nil, nil
+	// }
+
+	token, err := GoogleOauthConfig.Exchange(context.Background(), code)
+	if err != nil {
+		fmt.Printf("Exchange do código falhou '%s'\n", err)
+		return err
+	}
+
+	resp, err := http.Get("https://www.googleapis.com/oauth2/v2/userinfo?access_token=" + url.QueryEscape(token.AccessToken))
+	if err != nil {
+		http.Redirect(*tc.Response(), tc.Request(), GoogleWentWrongRedirUrl, http.StatusTemporaryRedirect)
+		return err
+	}
+	defer resp.Body.Close()
+
+	response, err := io.ReadAll(resp.Body)
+	if err != nil {
+		http.Redirect(*tc.Response(), tc.Request(), GoogleWentWrongRedirUrl, http.StatusTemporaryRedirect)
+		return nil
+	}
+
+	var userInfo GoogleDefaultResponse
+	err = json.Unmarshal(response, &userInfo)
+	if err != nil {
+		return err
+	}
+
+	//  &GoogleAuthResponse{
+	// 	UserInfo: userInfo,
+	// 	Token:    token,
+	// }, nil
+
+	log.Printf("%+v\n", GoogleAuthResponse{
+		UserInfo: userInfo,
+		Token:    token,
+	})
 	return nil
+
+	// var response map[string]string
+	// frontUrl := os.Getenv("http://localhost:4200")
+
+	// http.Redirect(*tc.Response(), tc.Request(), fmt.Sprintf("%s/dashboard?token=%s", frontUrl, response), http.StatusFound)
+	// return nil
 }

@@ -43,7 +43,11 @@ type GoogleDefaultResponse struct {
 	ID            string `json:"id"`
 	Email         string `json:"email"`
 	VerifiedEmail bool   `json:"verified_email"`
+	Name          string `json:"name"`
+	GivenName     string `json:"given_name"`
+	FamilyName    string `json:"family_name"`
 	Picture       string `json:"picture"`
+	Locale        string `json:"locale"`
 	HostedDomain  string `json:"hd"`
 }
 
@@ -82,6 +86,7 @@ func UseGoogleOauth(clientID, clientSecret, redirectURL, googleWentWrongdRedirec
 }
 
 func AuthGoogleHandler(tc *TupaContext) error {
+
 	URL, err := url.Parse(GoogleOauthConfig.Endpoint.AuthURL)
 	if err != nil {
 		return fmt.Errorf("parse: %w", err)
@@ -89,7 +94,7 @@ func AuthGoogleHandler(tc *TupaContext) error {
 
 	parameters := url.Values{}
 	parameters.Add("client_id", GoogleOauthConfig.ClientID)
-	parameters.Add("scope", strings.Join(GoogleOauthConfig.Scopes, " "))
+	parameters.Add("scope", strings.Join(append(GoogleOauthConfig.Scopes, "profile"), " "))
 	parameters.Add("redirect_uri", GoogleOauthConfig.RedirectURL)
 	parameters.Add("response_type", "code")
 
@@ -171,6 +176,8 @@ func AuthGoogleCallback(tc *TupaContext) (*GoogleAuthResponse, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	log.Println("User info:", userInfo)
 
 	return &GoogleAuthResponse{
 		UserInfo: userInfo,
